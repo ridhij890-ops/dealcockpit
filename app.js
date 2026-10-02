@@ -1020,6 +1020,9 @@
     });
     if (records.length > 200) throw new Error("Import up to 200 startups per CSV so the dashboards remain responsive.");
     records.importNotes = convertedInrUnits ? ["INR crore/lakh values were converted to USD millions using the app's illustrative fixed rate of ₹83 per USD."] : [];
+    if (headers.includes("grossmargin") && !headers.some((header) => ["margin", "profitmargin", "profitmarginpercent", "profitmarginpct"].includes(header))) {
+      records.importNotes.push("Gross margin is used as a proxy for profit margin because the workbook does not include a numeric profit-margin field; model scores may differ.");
+    }
     return records;
   }
 
