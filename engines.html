@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08111e">
+  <meta name="description" content="DealCockpit — an illustrative venture analytics cockpit for screening, stress testing, and investment committee workflows.">
+  <title>DealCockpit — Core engines</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="#home" aria-label="DealCockpit home">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M7 8h11c9 0 15 5 15 12S27 32 18 32H7V8Zm8 7v10h3c4 0 7-2 7-5s-3-5-7-5h-3Z" fill="currentColor"/><circle cx="31" cy="9" r="3" fill="#52e0e8"/></svg></span>
+      <span>Deal<span class="brand-light">Cockpit</span><small>VENTURE INTELLIGENCE</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="index.html">Home</a><a href="features.html">Features</a><a href="engines.html" aria-current="page">Core engines</a><a href="about.html">About</a>
+    </nav>
+    <div class="header-actions">
+      <label class="sr-only" for="currency">Display currency</label>
+      <select id="currency" class="currency-select" aria-label="Display currency">
+        <option value="USD">USD $</option><option value="INR">INR ₹</option><option value="EUR">EUR €</option><option value="GBP">GBP £</option>
+      </select>
+      <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to light theme" title="Toggle theme"><span aria-hidden="true">☼</span></button>
+      <a class="button button-primary header-cta" href="engines.html#screening">Launch engine <span aria-hidden="true">↗</span></a>
+      <button id="menu-toggle" class="icon-button menu-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false">☰</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" id="home">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="status-dot"></span> THE INVESTOR'S OPERATING SYSTEM</div>
+        <h1>See the signal.<br><span>Back the future.</span></h1>
+        <p class="hero-lede">A sharper lens on early-stage companies. Screen opportunities, stress-test assumptions, and bring conviction to every investment conversation.</p>
+        <div class="hero-buttons"><a class="button button-primary" href="#screening">Explore the cockpit <span aria-hidden="true">→</span></a><a href="features.html" class="text-link">See product features <span aria-hidden="true">↗</span></a></div>
+        <div class="hero-proof"><div class="avatar-stack"><span>R</span><span>A</span><span class="proof-icon">✳</span></div><p>Built by finance minds.<br><b>Designed for decisive teams.</b></p></div>
+      </div>
+      <div class="hero-visual">
+        <div class="orb orb-one"></div><div class="orb orb-two"></div>
+        <div class="hero-grid" aria-hidden="true"></div>
+        <div class="hero-owl" aria-label="Stylized owl mascot" role="img"><svg viewBox="0 0 300 300"><path d="M61 112 44 39l75 42M239 112l17-73-75 42" fill="#d5e9eb" stroke="#213b4b" stroke-width="7" stroke-linejoin="round"/><path d="M55 127c0-57 37-93 95-93s95 36 95 93c0 76-43 127-95 127s-95-51-95-127Z" fill="#aabfc1" stroke="#243f4e" stroke-width="8"/><path d="M73 146c0-33 23-56 52-56s45 23 45 56-22 56-49 56-48-23-48-56Zm88 0c0-33 23-56 52-56s49 23 49 56-22 56-49 56-52-23-52-56Z" fill="#f3f3df" stroke="#294657" stroke-width="6"/><ellipse cx="121" cy="146" rx="14" ry="17" fill="#162d3b"/><ellipse cx="212" cy="146" rx="14" ry="17" fill="#162d3b"/><circle cx="125" cy="141" r="4" fill="white"/><circle cx="216" cy="141" r="4" fill="white"/><path d="m149 166 13-1-7 16-7-15Z" fill="#d89a5c"/><path d="m97 220-24 34 44-12m87-22 24 34-44-12" fill="#d99d65" stroke="#263f4b" stroke-width="6" stroke-linejoin="round"/><path d="M88 81 64 63l8 40m140-22 24-18-8 40" fill="#607b7d"/></svg></div>
+        <div class="floating-tag tag-top"><span class="tag-dot"></span> LIVE DEAL ANALYSIS</div>
+        <div class="floating-tag tag-bottom"><span class="tag-icon">↗</span><span><small>PORTFOLIO UPSIDE</small><b>+24.8% <em>▲ 3.2%</em></b></span></div>
+        <div class="hero-mini-card"><span class="mini-label">DEAL SCORE</span><div class="mini-score"><span id="hero-score">66</span><span>/100</span></div><div class="mini-bar"><i id="hero-score-bar"></i></div><small>Illustrative model score</small></div>
+      </div>
+      <div class="hero-bottom">
+        <div class="hero-note"><span class="note-icon">✳</span><span><b>Clarity over complexity.</b><small>Decision support, not a black box.</small></span></div>
+        <div class="upload-zone" id="drop-zone">
+          <input id="csv-file" type="file" accept=".csv,text/csv" hidden>
+          <span class="upload-icon" aria-hidden="true">⇧</span>
+          <span><b>Bring your own deal data</b><small>Import one startup per CSV row; the eight model inputs are required. Drop a file here or <button type="button" id="browse-csv" class="inline-button">browse files</button></small></span>
+          <button id="sample-data" class="button button-quiet" type="button">Load sample deal <span aria-hidden="true">→</span></button>
+          <button id="sample-portfolio" class="button button-outline" type="button">Load sample portfolio (4 deals)</button>
+        </div>
+      </div>
+      <div id="upload-status" class="sr-only" aria-live="polite"></div>
+    </section>
+
+    <section id="screening" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">01 / DEAL SCREENING</div><h2>Start with the <span>signal.</span></h2></div><button id="download-memo" class="button button-outline" type="button">↓ Download evaluation memo</button></div>
+      <div class="screen-layout">
+        <article class="panel score-panel">
+          <div class="panel-head"><div><span class="panel-kicker">CURRENT OPPORTUNITY</span><h3 id="startup-name">Northstar AI</h3></div><span id="score-label" class="pill pill-positive">PROMISING</span></div>
+          <div class="score-main">
+            <div class="gauge" id="probability-gauge" role="img" aria-label="Success probability 68 percent"><svg viewBox="0 0 180 110" aria-hidden="true"><path class="gauge-track" d="M17 97a73 73 0 0 1 146 0"/><path id="gauge-value" class="gauge-value" d="M17 97a73 73 0 0 1 146 0"/></svg><div class="gauge-number"><strong id="success-prob">68%</strong><small>success probability</small></div></div>
+            <div class="return-stat"><span>PROJECTED ROI</span><strong id="projected-roi">4.2<span>×</span></strong><small>illustrative return multiple</small></div>
+          </div>
+          <div class="confidence-row"><span>Confidence band <b id="confidence-band">58–78%</b></span><span class="confidence-line"><i></i></span><small>Illustrative range</small></div>
+          <div class="risk-block"><div class="subhead"><span>Risk flags</span><span id="risk-count">2 identified</span></div><div id="risk-flags" class="risk-tags"></div></div>
+          <div class="score-foot"><span><i class="tiny-positive"></i> Based on 8 inputs</span><span class="mono" id="model-disclaimer">DEMO MODEL · V1.0</span></div>
+        </article>
+        <article class="panel contribution-panel">
+          <div class="panel-head"><div><span class="panel-kicker">EQUATION-BASED EXPLAINABILITY</span><h3>Why did the model move?</h3></div><span class="info-dot" title="A cumulative waterfall of supplied equation coefficients—not SHAP or causal effects">i</span></div>
+          <p class="panel-description">Trace each supplied coefficient through the model’s logit to its illustrative probability. This transparent equation-based waterfall is not SHAP.</p>
+          <div id="contribution-chart" class="contribution-chart" aria-label="Feature contribution chart"></div>
+        </article>
+      </div>
+      <div class="inputs-bar panel">
+        <div class="input-bar-title"><span class="panel-kicker">DEAL INPUTS</span><small>Update assumptions to recalculate</small></div>
+        <label>Category<select id="category"><option>Agritech</option><option>Clean Energy &amp; EV</option><option>E-commerce &amp; Q-Commerce</option><option>Edtech</option><option>Enterprise SaaS</option><option>Fintech</option><option>Healthtech</option><option>Logistics &amp; Supply Chain</option></select></label>
+        <label>Investor type<select id="investor"><option>Angel</option><option>Early-Stage VC</option><option>Growth VC</option><option>Corporate VC</option></select></label>
+        <label>Valuation ($M)<input id="valuation" type="number" min="0" max="10000" step="0.1" value="24"></label>
+        <label>LTV / CAC<input id="ltv-cac" type="number" min="0" max="100" step="0.1" value="6"></label>
+        <label>Funding rounds<input id="rounds" type="number" min="0" max="30" step="1" value="2"></label>
+        <label>Monthly burn ($M)<input id="burn" type="number" min="0" max="1000" step="0.1" value="0.42"></label>
+        <label>Annual revenue ($M)<input id="revenue" type="number" min="0" max="10000" step="0.1" value="10"></label>
+        <label>Funding raised ($M)<input id="funding" type="number" min="0" max="10000" step="0.1" value="3"></label>
+        <label>Founder exp. (yrs)<input id="experience" type="number" min="0" max="80" step="1" value="18"></label>
+        <label>Profit margin (%)<input id="margin" type="number" min="-100" max="100" step="0.1" value="12"></label>
+        <p id="validation-message" class="validation-message" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="engines" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">02 / SCENARIO LAB</div><h2>Pressure-test the <span>plan.</span></h2></div><p>Small assumption changes can shift the whole outcome. See them before they happen.</p></div>
+      <div class="engine-grid">
+        <article id="whatif" class="panel whatif-panel">
+          <div class="panel-head"><div><span class="panel-kicker">WHAT-IF ENGINE</span><h3>Run a quick stress test</h3></div><span class="engine-icon">⌁</span></div>
+          <p class="panel-description">Adjust monthly burn and annual revenue to see the model respond.</p>
+          <label class="range-label" for="burn-slider"><span>Monthly burn</span><output id="burn-output">$0.42M</output></label>
+          <input id="burn-slider" type="range" min="0.05" max="2.5" step="0.01" value="0.42">
+          <label class="range-label" for="revenue-slider"><span>Annual revenue</span><output id="revenue-output">$4.8M</output></label>
+          <input id="revenue-slider" type="range" min="0" max="30" step="0.1" value="4.8">
+          <div class="whatif-result"><div><small>UPDATED SUCCESS PROBABILITY</small><strong id="whatif-prob">68%</strong></div><div><small>CHANGE VS. BASELINE</small><strong id="whatif-delta" class="positive-text">+0 pts</strong></div><div class="whatif-spark" id="whatif-spark" aria-hidden="true"></div></div>
+          <button id="reset-scenario" class="text-button" type="button">Reset to current deal ↺</button>
+        </article>
+        <article id="portfolio" class="panel allocation-panel">
+          <div class="panel-head"><div><span class="panel-kicker">CAPITAL ALLOCATION</span><h3>Portfolio construction</h3></div><span class="engine-icon">◉</span></div>
+          <p class="panel-description">An illustrative allocation across the current opportunity set.</p>
+          <div class="allocation-content"><div class="donut-chart" role="img" aria-label="Portfolio allocation visualization"><div class="donut-center"><strong>12</strong><small>deals</small></div></div><div id="allocation-legend" class="allocation-legend"></div></div>
+          <div class="allocation-footer"><span>Illustrative target deployment</span><b id="deployment-total">$18.4M</b></div>
+          <div class="stage-allocation">
+            <span class="panel-kicker">FUND DEPLOYMENT MIX</span>
+            <label class="range-label" for="seed-weight"><span>Seed</span><output id="seed-weight-output">40%</output></label><input id="seed-weight" type="range" min="0" max="100" value="40">
+            <label class="range-label" for="seriesa-weight"><span>Series A</span><output id="seriesa-weight-output">40%</output></label><input id="seriesa-weight" type="range" min="0" max="100" value="40">
+            <label class="range-label" for="followon-weight"><span>Follow-on reserve</span><output id="followon-weight-output">20%</output></label><input id="followon-weight" type="range" min="0" max="100" value="20">
+            <label class="range-label" for="macro-failure"><span>Macro failure-rate shock</span><output id="macro-failure-output">20%</output></label><input id="macro-failure" type="range" min="0" max="80" value="20">
+            <div class="stage-pie" id="stage-pie" role="img" aria-label="Seed, Series A, and follow-on allocation"></div>
+            <div class="allocation-footer"><span>Illustrative expected returned capital</span><b id="expected-fund-return">$—</b></div>
+            <p class="micro-note">Stage weights are normalized for the chart. Return assumptions and macro shock are illustrative, not an optimized portfolio.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="sensitivity" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">03 / TWO-WAY STRESS TEST</div><h2>Stress-test two assumptions <span>at once.</span></h2></div><p>Illustrative ROI across revenue-growth and burn shocks. Select a cell to inspect its demo survival odds and runway.</p></div>
+      <article class="panel sensitivity-panel">
+        <div class="panel-head"><div><span class="panel-kicker">5 × 5 RETURN SENSITIVITY</span><h3>Revenue growth vs. monthly burn</h3></div><span class="pill pill-neutral">ILLUSTRATIVE · NOT FORECAST</span></div>
+        <div id="sensitivity-heatmap" class="sensitivity-heatmap" role="grid" aria-label="ROI sensitivity matrix"></div>
+        <div id="sensitivity-detail" class="sensitivity-detail" aria-live="polite">Choose a stress-grid cell to inspect the scenario.</div>
+        <div class="heatmap-legend"><span>Lower modeled ROI</span><i></i><span>Higher modeled ROI</span></div>
+      </article>
+    </section>
+
+    <section id="pipeline" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">04 / DEAL FLOW</div><h2>Keep the right deals <span>moving.</span></h2></div><button id="add-deal" class="button button-outline" type="button">＋ Add a deal</button></div>
+      <div class="pipeline-board" id="pipeline-board"></div>
+      <p class="pipeline-hint">Drag cards between stages or use the stage menu on each deal.</p>
+    </section>
+
+    <section id="capital-tools" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">05 / CAPITAL TOOLS</div><h2>Model the <span>ownership.</span></h2></div><p>Practical mechanics to frame a round—not a substitute for legal or tax advice.</p></div>
+      <div class="capital-grid">
+        <article class="panel waterfall-panel">
+          <div class="panel-head"><div><span class="panel-kicker">CAP TABLE · LIQUIDATION WATERFALL</span><h3>Who gets what at exit?</h3></div></div>
+          <label class="range-label" for="exit-slider"><span>Illustrative exit value</span><output id="exit-output">$80M</output></label><input id="exit-slider" type="range" min="10" max="1000" step="5" value="80">
+          <div class="tool-inputs exit-value-input"><label>Exit value ($M)<input id="exit-value" type="number" min="10" max="1000" value="80" step="1"></label></div>
+          <div class="stack-builder-head"><div><span class="panel-kicker">PREFERENCE STACK BUILDER</span><small>Drag rows to reorder priority. Follow-on checks define each preference floor.</small></div><button id="add-stack-round" class="button button-outline" type="button">＋ Add round</button></div>
+          <div id="preference-stack" class="preference-stack"></div>
+          <div class="option-pool-row"><label>Option pool (%)<input id="option-pool" type="number" min="0" max="100" step=".5" value="12"></label><span id="common-ownership" class="mono">—</span><span id="stack-warning" class="micro-note"></span></div>
+          <div id="waterfall-result" class="waterfall-result"></div><div class="waterfall-bar" id="waterfall-bar" role="img" aria-label="Liquidation proceeds distribution"></div>
+          <div id="waterfall-payouts" class="waterfall-payouts"></div>
+          <p id="waterfall-panel-note" class="micro-note">Simplified illustrative waterfall. Assumes a seniority stack in row order, each preference is investment × preference multiple, and participation follows the selected row terms. Does not model full legal cap-table definitions.</p>
+        </article>
+        <article class="panel safe-panel">
+          <div class="panel-head"><div><span class="panel-kicker">SAFE CALCULATOR</span><h3>Estimate conversion ownership</h3></div></div>
+          <div class="safe-toggle" role="group" aria-label="SAFE type"><button type="button" data-safe="pre" class="active">Pre-money SAFE</button><button type="button" data-safe="post">Post-money SAFE</button></div>
+          <div class="tool-inputs"><label>Investment ($K)<input id="safe-investment" type="number" min="1" value="500" step="10"></label><label>Valuation cap ($M)<input id="safe-cap" type="number" min="0.1" value="8" step="0.5"></label><label>Discount (%)<input id="safe-discount" type="number" min="0" max="100" value="20" step="1"></label><label>Next round pre-money ($M)<input id="safe-round" type="number" min="0.1" value="12" step="0.5"></label></div>
+          <div id="safe-result" class="safe-result"></div><p class="micro-note">Simplified estimate; actual SAFE conversion depends on instrument terms and capitalization definitions.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="term-sheet" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">06 / NEGOTIATION WORKSPACE</div><h2>Turn risk flags into <span>counter-terms.</span></h2></div><button id="open-counterproposal" class="button button-outline" type="button">Generate counter-proposal ↗</button></div>
+      <article class="panel counterproposal-panel">
+        <div class="counterproposal-status"><span class="status-dot"></span><span id="counterproposal-trigger">Risk trigger checks current monthly burn and valuation inputs.</span></div>
+        <div id="counterproposal-drawer" class="counterproposal-drawer">
+          <div class="panel-head"><div><span class="panel-kicker">ILLUSTRATIVE DRAFT · NOT LEGAL ADVICE</span><h3>Counter-proposal builder</h3></div><span class="pill pill-neutral">EDITABLE TERMS</span></div>
+          <div class="tool-inputs term-inputs">
+            <label>Target monthly burn ($M)<input id="term-burn" type="number" min="0.05" max="1000" step="0.05" value="0.8"></label>
+            <label>Target pre-money valuation ($M)<input id="term-valuation" type="number" min="0.1" max="10000" step="0.5" value="20"></label>
+            <label class="term-checkbox"><input id="term-tranches" type="checkbox" checked> Release investment in milestone tranches</label>
+            <label class="term-checkbox"><input id="term-board-seat" type="checkbox"> Request investor board seat</label>
+            <label>Milestone tranche 1 (%)<input id="term-tranche-one" type="number" min="1" max="99" step="1" value="60"></label>
+            <label>Follow-on release milestone<input id="term-milestone" type="text" maxlength="120" value="Reach agreed revenue and runway milestones"></label>
+          </div>
+          <div id="counterproposal-result" class="counterproposal-result" aria-live="polite"></div>
+          <div class="counterproposal-actions"><button id="download-terms" class="button button-primary" type="button">↓ Download clause summary</button><button id="copy-terms" class="button button-outline" type="button">Copy summary</button></div>
+        </div>
+      </article>
+    </section>
+
+    <section id="compare-deals" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">07 / INBOUND TRIAGE</div><h2>Compare deals <span>side by side.</span></h2></div><p>Select 2–4 opportunities in the pipeline to compare their illustrative metrics.</p></div>
+      <article class="panel compare-panel">
+        <div class="panel-head"><div><span class="panel-kicker">PIPELINE COMPARISON</span><h3>Pick opportunities from your pipeline</h3></div><span id="compare-count" class="pill pill-neutral">0 SELECTED</span></div>
+        <div id="deal-compare-picker" class="deal-compare-picker"></div>
+        <div id="deal-comparison" class="deal-comparison" aria-live="polite">Select at least two deals to build a comparison.</div>
+      </article>
+    </section>
+
+    <section id="pitch-brief" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">08 / PITCH DECK REVIEW</div><h2>Keep claims close to the <span>numbers.</span></h2></div><p>Preview a deck locally and link review notes to model flags. Source claims are user-provided, not automatically verified.</p></div>
+      <article class="panel pitch-panel">
+        <div class="pitch-toolbar"><label class="button button-outline pitch-upload" for="pitch-file">↑ Open a PDF deck<input id="pitch-file" type="file" accept="application/pdf,.pdf" hidden></label><span id="pitch-file-status" class="micro-note">PDF stays in this browser; it is not uploaded to the AI provider.</span></div>
+        <div class="pitch-split">
+          <div class="pitch-viewer" id="pitch-viewer"><div class="pitch-empty"><span>▤</span><b>Pitch deck preview</b><small>Choose a local PDF file to view it here.</small></div></div>
+          <div class="pitch-annotations"><div class="panel-kicker">CLAIM &amp; RISK REVIEW</div><h3>Link a model flag to a source note</h3><label>Flagged metric<select id="pitch-metric"><option value="burn">Monthly burn</option><option value="valuation">Valuation</option><option value="revenue">Annual revenue</option><option value="ltv">LTV / CAC</option><option value="margin">Profit margin</option></select></label><label>Slide / page<input id="pitch-page" type="number" min="1" value="4"></label><label>Source sentence or reviewer note<textarea id="pitch-note" rows="4" maxlength="500" placeholder="Paste the relevant deck claim or write a diligence note…"></textarea></label><button id="save-annotation" class="button button-outline" type="button">Save source note</button><div id="pitch-annotation-list" class="pitch-annotation-list"></div><p class="micro-note">Page links jump the local PDF preview to the noted page. Paste the exact source sentence yourself; PDF text extraction and automatic claim highlighting are not provided.</p></div>
+        </div>
+        <div class="audio-brief-row"><div><span class="panel-kicker">EXECUTIVE AUDIO BRIEF</span><b>Listen to a short, locally synthesized deal summary.</b><small>Generated from the current demo inputs with your browser’s speech engine.</small></div><button id="play-brief" class="button button-primary" type="button">▶ Play brief</button><button id="stop-brief" class="button button-outline" type="button">■ Stop</button></div>
+      </article>
+    </section>
+
+    <section id="market" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">09 / MARKET CONTEXT</div><h2>Ground the <span>multiple.</span></h2></div><p>Illustrative peer benchmarks for a conversation—not live transaction data.</p></div>
+      <article class="panel market-panel">
+        <div class="panel-head"><div><span class="panel-kicker">ARR MULTIPLE OVERLAY</span><h3>Where does this deal sit?</h3></div><label class="compact-select">Peer set<select id="market-category"><option value="SaaS">Enterprise SaaS</option><option value="Fintech">Fintech</option><option value="Healthtech">Healthtech</option><option value="Climate">Clean Energy &amp; EV</option></select></label></div>
+        <div class="market-chart" id="market-chart"></div>
+        <div class="market-note"><span class="market-dot"></span><span><b id="deal-multiple-label">Northstar AI: 5.0× ARR</b><small>Multiple implied by valuation ÷ annual revenue. Peer ranges are illustrative.</small></span></div>
+      </article>
+    </section>
+
+    <section id="ic" class="section shell">
+      <div class="section-heading"><div><div class="eyebrow">10 / INVESTMENT COMMITTEE</div><h2>Make room for <span>conviction.</span></h2></div><p>Capture a point-in-time pulse. Votes stay in this browser session.</p></div>
+      <div class="ic-layout">
+        <article class="panel vote-panel"><div class="panel-head"><div><span class="panel-kicker">LOCAL DEMO SCORECARD · NOT LIVE COLLABORATION</span><h3>Northstar AI · Series A</h3></div><span class="pill pill-neutral" id="consensus-label">AWAITING VOTES</span></div>
+          <div class="radar-layout"><svg id="ic-radar" class="ic-radar" viewBox="0 0 240 220" role="img" aria-label="Investment committee six-pillar scorecard"></svg><div id="ic-pillar-inputs" class="ic-pillar-inputs"></div></div>
+          <div class="ic-consensus"><span>IC CONSENSUS INDEX</span><b id="ic-consensus-index">—</b><small>Weighted vote pulse; illustrative team input</small></div>
+          <div class="risk-justifications"><span class="panel-kicker">REQUIRED RISK JUSTIFICATION (SELECT AT LEAST ONE)</span><div class="risk-options">
+            <label><input type="checkbox" value="Valuation risk"> Valuation</label><label><input type="checkbox" value="Market risk"> Market</label><label><input type="checkbox" value="Team risk"> Team</label><label><input type="checkbox" value="Execution risk"> Execution</label><label><input type="checkbox" value="Unit-economics risk"> Unit economics</label><label><input type="checkbox" value="Regulatory risk"> Regulatory</label>
+          </div></div>
+          <div class="vote-meter"><div class="vote-counts"><span><i class="vote-yes"></i> Strong buy <b id="yes-count">0</b></span><span><i class="vote-abstain"></i> Conditional <b id="abstain-count">0</b></span><span><i class="vote-no"></i> Pass <b id="no-count">0</b></span></div><div class="vote-bar" id="vote-bar"></div></div>
+          <div class="vote-actions"><button data-vote="strong" class="vote-button vote-button-yes" type="button">✓ Strong buy</button><button data-vote="conditional" class="vote-button vote-button-abstain" type="button">◐ Conditional buy</button><button data-vote="pass" class="vote-button vote-button-no" type="button">× Pass</button></div>
+          <p id="vote-confirmation" class="micro-note" aria-live="polite">Select at least one risk justification, then cast a demo vote. Votes are local to this browser.</p>
+        </article>
+        <article class="panel benchmark-panel"><div class="panel-head"><div><span class="panel-kicker">MODEL BENCHMARKS</span><h3>Context, not certainty</h3></div></div><p class="panel-description">Illustrative comparison against simple screening baselines.</p><div id="benchmark-bars" class="benchmark-bars"></div><p class="micro-note">Illustrative demo metrics only; not validated backtesting or investment performance.</p></article>
+      </div>
+      <div class="bottom-grid">
+        <article class="panel correlation-panel"><div class="panel-head"><div><span class="panel-kicker">FEATURE RELATIONSHIPS</span><h3>Correlation snapshot</h3></div></div><p class="panel-description">Illustrative input correlations; not calculated from a real dataset.</p><div id="correlation-matrix" class="correlation-matrix"></div></article>
+        <article class="panel chat-panel">
+          <div class="panel-head"><div><span class="panel-kicker">DEALCOCKPIT ASSISTANT</span><h3 id="assistant-title">Ask the analyst</h3></div><span class="online-pill offline" id="ai-status"><i></i><span>CHECKING AI</span></span></div>
+          <div class="assistant-toolbar"><div class="assistant-tabs" role="tablist" aria-label="Assistant mode"><button type="button" class="assistant-tab active" role="tab" aria-selected="true" data-chat-mode="analyst">Deal analyst</button><button type="button" class="assistant-tab" role="tab" aria-selected="false" data-chat-mode="helpdesk">Help desk</button></div><button type="button" class="clear-chat" id="clear-chat">Clear chat</button></div>
+          <details class="ai-key-settings">
+            <summary>Configure Gemini API key</summary>
+            <p>Enter your Google AI Studio key to enable open-ended answers in both chat modes. It stays in this server’s memory and is cleared when the server stops.</p>
+            <form id="gemini-key-form" class="gemini-key-form">
+              <label class="sr-only" for="gemini-api-key">Gemini API key</label>
+              <input id="gemini-api-key" type="password" autocomplete="new-password" placeholder="Paste Gemini API key" maxlength="512">
+              <button id="save-gemini-key" class="button button-primary" type="submit">Save for this session</button>
+            </form>
+            <div class="gemini-key-actions"><button id="toggle-gemini-key" class="text-button" type="button" aria-pressed="false">Show key</button><button id="clear-gemini-key" class="text-button" type="button">Clear saved key</button></div>
+            <small id="gemini-key-status" class="gemini-key-status" aria-live="polite">The key is sent to Google when you ask a question. Do not use a key you cannot safely expose to this local browser session.</small>
+          </details>
+          <p class="assistant-description" id="assistant-description">Ask general questions or explore this deal. Deal context is included when available.</p>
+          <div id="chat-messages" class="chat-messages" aria-live="polite" aria-relevant="additions text"><div class="chat-msg assistant-msg">Hi! Ask me about this deal, venture investing, financial modeling, or anything else you’re working through. I’ll explain assumptions and call out uncertainty.</div></div>
+          <form id="chat-form" class="chat-form"><label class="sr-only" for="chat-input">Ask the AI assistant</label><input id="chat-input" type="text" placeholder="Ask anything…" autocomplete="off" maxlength="2000"><button class="chat-send" id="chat-send" type="submit" aria-label="Send message">↑</button></form>
+          <div class="chat-suggestions"><button type="button">Explain this deal’s score</button><button type="button">How does a SAFE work?</button><button type="button">Help me use DealCockpit</button></div>
+          <p class="assistant-privacy">Questions are sent to the configured AI provider when connected. Don’t share sensitive personal or confidential information.</p>
+        </article>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer shell"><a class="brand footer-brand" href="index.html"><span class="brand-mark">◈</span><span>Deal<span class="brand-light">Cockpit</span><small>VENTURE INTELLIGENCE</small></span></a><span>Illustrative demo · Not investment advice</span><div><a href="about.html">About</a><button type="button" id="open-shortcuts">⌘K shortcuts</button></div></footer>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="command-overlay" class="command-overlay" hidden>
+    <div class="command-dialog" role="dialog" aria-modal="true" aria-labelledby="command-title">
+      <div class="command-search"><span aria-hidden="true">⌕</span><label class="sr-only" id="command-title" for="command-input">Search DealCockpit actions</label><input id="command-input" type="text" placeholder="Jump to a section, term, or action…" autocomplete="off"><kbd>ESC</kbd></div>
+      <div id="command-results" class="command-results"></div>
+      <div class="command-footer"><span>↑↓ to navigate</span><span><kbd>ENTER</kbd> to select</span><span><kbd>ESC</kbd> to close</span></div>
+    </div>
+  </div>
+</body>
+</html>
