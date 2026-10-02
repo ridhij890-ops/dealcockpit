@@ -939,14 +939,14 @@
       category: ["category", "sector", "industry"],
       investor: ["investor", "investortype"],
       stage: ["stage", "pipelinestage", "dealstage"],
-      valuation: ["valuation", "valuationm", "valuationusd", "valuationusdm", "valuationusdmm", "companyvaluation"],
+      valuation: ["valuation", "valuationm", "valuationusd", "valuationusdm", "valuationusdmm", "companyvaluation", "currentvaluation", "currentvaluationcr"],
       ltv: ["ltvcac", "ltvtocac", "ltvcacratio"],
       rounds: ["rounds", "fundingrounds"],
-      burn: ["burn", "monthlyburn", "monthlyburnm", "monthlyburnusdm"],
-      revenue: ["revenue", "annualrevenue", "annualrevenuem", "annualrevenueusdm", "arr"],
-      funding: ["funding", "fundingraised", "fundingraisedm", "fundingraisedusdm", "totalfunding", "totalfundingm"],
+      burn: ["burn", "monthlyburn", "monthlyburnm", "monthlyburnusdm", "monthlyburnlakh"],
+      revenue: ["revenue", "annualrevenue", "annualrevenuem", "annualrevenueusdm", "annualrevenuecr", "arr"],
+      funding: ["funding", "fundingraised", "fundingraisedm", "fundingraisedusdm", "totalfunding", "totalfundingm", "totalfundingraisedcr"],
       experience: ["experience", "founderexperience", "founderexperienceyears"],
-      margin: ["margin", "profitmargin", "profitmarginpercent", "profitmarginpct"]
+      margin: ["margin", "profitmargin", "profitmarginpercent", "profitmarginpct", "grossmargin"]
     };
     const columns = {};
     Object.entries(aliases).forEach(([key, options]) => {
@@ -954,12 +954,13 @@
     });
     const formMap = { valuation: "valuation", ltv: "ltv-cac", rounds: "rounds", burn: "burn", revenue: "revenue", funding: "funding", experience: "experience", margin: "margin" };
     const requiredFields = Object.keys(formMap);
-    const missing = requiredFields.filter((key) => columns[key] < 0);
+    const missing = requiredFields.filter((key) => columns[key] < 0 && !(key === "rounds" && columns.stage >= 0));
     if (missing.length) {
       throw new Error(`CSV is missing required model columns: ${missing.join(", ")}. Include valuation, ltv_cac, rounds, burn, revenue, funding, experience, and margin.`);
     }
     const categories = Object.keys(categoryOffsets);
     const investors = Object.keys(investorOffsets);
+    let convertedInrUnits = false;
     const records = rows.slice(1).map((sourceCells, index) => {
       const line = index + 2;
       const cells = [...sourceCells];
@@ -969,9 +970,21 @@
       const record = {};
       Object.entries(columns).forEach(([key, column]) => {
         if (column < 0 || cells[column] === "") return;
-        record[key] = key === "name" || key === "category" || key === "investor" || key === "stage"
-          ? cells[column] : parseNumericCell(cells[column]);
+        if (key === "name" || key === "category" || key === "investor" || key === "stage") {
+          record[key] = cells[column];
+          return;
+        }
+        record[key] = parseNumericCell(cells[column]);
+        const header = headers[column];
+        if (["valuation", "revenue", "funding"].includes(key) && /(?:cr|crore)s?$/.test(header)) {
+          record[key] *= 10 / 83;
+          convertedInrUnits = true;
+        } else if (key === "burn" && /lakh/.test(header)) {
+          record[key] *= 0.1 / 83;
+          convertedInrUnits = true;
+        }
       });
+      if (record.rounds === undefined && record.stage) record.rounds = roundsForStage(record.stage);
       if (requiredFields.some((key) => record[key] === undefined)) {
         throw new Error(`CSV row ${line} is missing a required model value. Each startup needs all eight model inputs.`);
       }
@@ -987,6 +1000,8 @@
         throw new Error(`CSV row ${line}: ${invalid[0]} must be a number from ${inputLimits[invalid[1]][0]} to ${inputLimits[invalid[1]][1]}.`);
       }
       if (record.category) {
+        const sector = record.category.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (["quickcommerce", "qcommerce"].includes(sector)) record.category = "E-commerce & Q-Commerce";
         const match = categories.find((item) => item.toLowerCase() === record.category.toLowerCase());
         if (!match) throw new Error(`CSV row ${line}: unknown category "${record.category}". Use a category shown in the screening selector.`);
         record.category = match;
@@ -1004,16 +1019,30 @@
       return { ...sample, ...record };
     });
     if (records.length > 200) throw new Error("Import up to 200 startups per CSV so the dashboards remain responsive.");
+    records.importNotes = convertedInrUnits ? ["INR crore/lakh values were converted to USD millions using the app's illustrative fixed rate of ₹83 per USD."] : [];
     return records;
   }
 
   function parseNumericCell(value) {
-    let normalized = String(value).trim().replace(/^\((.*)\)$/, "-$1").replace(/[₹$€£\s]/g, "");
-    normalized = normalized.replace(/(\d),(?=\d{3}(?:\D|$))/g, "$1").replace(/%$/, "");
+    let normalized = String(value).trim().replace(/[₹$€£\s]/g, "").replace(/%$/, "");
+    const accountingNegative = /^\([\d,.]+\)$/.test(normalized);
+    normalized = normalized.replace(/^\(|\)$/g, "");
     const suffix = normalized.match(/([kmb])$/i)?.[1]?.toLowerCase();
     const multiplier = suffix === "k" ? 0.001 : suffix === "b" ? 1000 : 1;
     if (suffix) normalized = normalized.slice(0, -1);
-    return Number(normalized) * multiplier;
+    const number = normalized.match(/^[+-]?(?:\d[\d,]*(?:\.\d*)?|\.\d+)/)?.[0];
+    if (!number) return Number.NaN;
+    return Number(number.replace(/,/g, "")) * multiplier * (accountingNegative ? -1 : 1);
+  }
+
+  function roundsForStage(stage) {
+    const normalized = String(stage).toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (normalized.includes("preseed")) return 0;
+    if (normalized === "seed" || normalized === "seedstage") return 1;
+    if (normalized === "seriesa") return 2;
+    if (normalized === "seriesb") return 3;
+    if (normalized === "seriesc" || normalized.includes("growth") || normalized.includes("followon")) return 4;
+    return 1;
   }
 
   function showUploadedFile(file) {
@@ -1113,7 +1142,12 @@
     }
     try {
       const records = [];
-      for (const file of dataFiles) records.push(...await parseDealFile(file));
+      const importNotes = [];
+      for (const file of dataFiles) {
+        const parsed = await parseDealFile(file);
+        records.push(...parsed);
+        importNotes.push(...(parsed.importNotes || []));
+      }
       if (records.length > 200) throw new Error("Import up to 200 startups total per selection so the dashboards remain responsive.");
       if (!$("#screening")) {
         try {
@@ -1126,7 +1160,7 @@
       }
       loadDataset(records, dataFiles.map((file) => file.name).join(", "));
       const otherCount = files.length - dataFiles.length;
-      $("#upload-status").textContent = `${records.length} startup${records.length === 1 ? "" : "s"} imported into the dashboards; ${files.length} file${files.length === 1 ? "" : "s"} remain available locally. ${otherCount ? `${otherCount} non-spreadsheet file${otherCount === 1 ? "" : "s"} attached for preview.` : "Files were not sent to a server."}`;
+      $("#upload-status").textContent = `${records.length} startup${records.length === 1 ? "" : "s"} imported into the dashboards. ${files.length} selected file${files.length === 1 ? " is" : "s are"} kept locally in this browser. ${importNotes.join(" ")} ${otherCount ? `${otherCount} non-spreadsheet file${otherCount === 1 ? "" : "s"} attached for preview.` : "Files were not sent to a server."}`;
     } catch (error) {
       $("#upload-status").textContent = error.message;
       toast(error.message);
