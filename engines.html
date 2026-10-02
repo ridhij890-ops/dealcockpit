@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <script src="xlsx.full.min.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -53,14 +54,15 @@
       <div class="hero-bottom">
         <div class="hero-note"><span class="note-icon">✳</span><span><b>Clarity over complexity.</b><small>Decision support, not a black box.</small></span></div>
         <div class="upload-zone" id="drop-zone">
-          <input id="csv-file" type="file" hidden>
+          <input id="csv-file" type="file" multiple hidden>
           <span class="upload-icon" aria-hidden="true">⇧</span>
-          <span><b>Bring your own deal data</b><small>Import one startup per CSV row; the eight model inputs are required. Drop a CSV file here or <button type="button" id="browse-csv" class="inline-button">browse files</button>. Other file types aren't supported yet.</small></span>
+          <span><b>Bring your own files</b><small>Select or drop any files here. CSV, TSV, and Excel spreadsheets update the dashboards; images, PDFs, and other files are kept as local attachments.</small><small id="upload-status" class="micro-note" role="status" aria-live="polite">Spreadsheet rows need all eight model inputs. Files stay on this device; nothing is uploaded to a server.</small></span>
+          <button id="browse-csv" class="button button-outline" type="button">Browse files</button>
           <button id="sample-data" class="button button-quiet" type="button">Load sample deal <span aria-hidden="true">→</span></button>
           <button id="sample-portfolio" class="button button-outline" type="button">Load sample portfolio (4 deals)</button>
         </div>
       </div>
-      <div id="upload-status" class="sr-only" aria-live="polite"></div>
+      <div id="uploaded-files" class="upload-files" aria-live="polite"></div>
     </section>
 
     <section id="screening" class="section shell">

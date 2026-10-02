@@ -37,6 +37,7 @@ jobs:
             "engines.html",
             "about.html",
             "app.js",
+            "xlsx.full.min.js",
             "styles.css"
           )
           foreach ($file in $siteFiles) {

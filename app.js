@@ -48,6 +48,7 @@
   ];
   let stackDragging = null;
   const selectedDeals = new Set();
+  const uploadedFiles = new Map();
   let pitchObjectUrl = null;
   let pitchAnnotations = [];
   let termSummary = "";
@@ -898,13 +899,28 @@
   }
 
   function parseCsv(text) {
+    text = text.replace(/^\uFEFF/, "");
+    const firstLine = text.split(/\r?\n/, 1)[0];
+    const delimiters = [",", ";", "\t"];
+    let quotedHeader = false;
+    const delimiterCounts = delimiters.map((delimiter) => {
+      let count = 0;
+      for (let i = 0; i < firstLine.length; i += 1) {
+        if (firstLine[i] === '"' && firstLine[i + 1] === '"' && quotedHeader) i += 1;
+        else if (firstLine[i] === '"') quotedHeader = !quotedHeader;
+        else if (!quotedHeader && firstLine[i] === delimiter) count += 1;
+      }
+      quotedHeader = false;
+      return count;
+    });
+    const delimiter = delimiters[delimiterCounts.indexOf(Math.max(...delimiterCounts))];
     const rows = [];
     let row = [], value = "", quoted = false;
     for (let i = 0; i < text.length; i += 1) {
       const char = text[i];
       if (char === '"' && quoted && text[i + 1] === '"') { value += '"'; i += 1; }
       else if (char === '"') quoted = !quoted;
-      else if (char === "," && !quoted) { row.push(value.trim()); value = ""; }
+      else if (char === delimiter && !quoted) { row.push(value.trim()); value = ""; }
       else if ((char === "\n" || char === "\r") && !quoted) {
         if (char === "\r" && text[i + 1] === "\n") i += 1;
         row.push(value.trim());
@@ -944,14 +960,17 @@
     }
     const categories = Object.keys(categoryOffsets);
     const investors = Object.keys(investorOffsets);
-    const records = rows.slice(1).map((cells, index) => {
+    const records = rows.slice(1).map((sourceCells, index) => {
       const line = index + 2;
+      const cells = [...sourceCells];
+      while (cells.length > headers.length && cells[cells.length - 1] === "") cells.pop();
+      while (cells.length < headers.length) cells.push("");
       if (cells.length !== headers.length) throw new Error(`CSV row ${line} has ${cells.length} values; expected ${headers.length}.`);
       const record = {};
       Object.entries(columns).forEach(([key, column]) => {
         if (column < 0 || cells[column] === "") return;
         record[key] = key === "name" || key === "category" || key === "investor" || key === "stage"
-          ? cells[column] : Number(cells[column]);
+          ? cells[column] : parseNumericCell(cells[column]);
       });
       if (requiredFields.some((key) => record[key] === undefined)) {
         throw new Error(`CSV row ${line} is missing a required model value. Each startup needs all eight model inputs.`);
@@ -988,25 +1007,126 @@
     return records;
   }
 
-  async function loadCsv(file) {
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".csv") && file.type !== "text/csv") {
-      const message = "This file type isn't supported yet. Choose a .csv file to load startup data.";
-      $("#upload-status").textContent = message;
-      return toast(message);
+  function parseNumericCell(value) {
+    let normalized = String(value).trim().replace(/^\((.*)\)$/, "-$1").replace(/[₹$€£\s]/g, "");
+    normalized = normalized.replace(/(\d),(?=\d{3}(?:\D|$))/g, "$1").replace(/%$/, "");
+    const suffix = normalized.match(/([kmb])$/i)?.[1]?.toLowerCase();
+    const multiplier = suffix === "k" ? 0.001 : suffix === "b" ? 1000 : 1;
+    if (suffix) normalized = normalized.slice(0, -1);
+    return Number(normalized) * multiplier;
+  }
+
+  function showUploadedFile(file) {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const url = URL.createObjectURL(file);
+    uploadedFiles.set(id, { url, file });
+    const card = document.createElement("article");
+    card.className = "upload-file";
+    card.dataset.fileId = id;
+
+    const extension = file.name.split(".").pop().toLowerCase();
+    const isImage = file.type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].includes(extension);
+    if (isImage) {
+      const preview = document.createElement("img");
+      preview.className = "upload-file-preview";
+      preview.src = url;
+      preview.alt = `Preview of ${file.name}`;
+      card.append(preview);
+    } else {
+      const icon = document.createElement("span");
+      icon.className = "upload-file-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = extension === "pdf" ? "PDF" : extension.toUpperCase().slice(0, 4) || "FILE";
+      card.append(icon);
+    }
+
+    const details = document.createElement("div");
+    details.className = "upload-file-details";
+    const filename = document.createElement("span");
+    filename.className = "upload-file-name";
+    filename.textContent = file.name;
+    const size = document.createElement("small");
+    size.textContent = file.size < 1024 * 1024
+      ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+      : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+    details.append(filename, size);
+
+    const open = document.createElement("a");
+    open.className = "upload-file-open";
+    open.href = url;
+    open.target = "_blank";
+    open.rel = "noopener";
+    open.textContent = isImage || extension === "pdf" ? "Preview" : "Open";
+    if (!isImage && extension !== "pdf") open.download = file.name;
+
+    const remove = document.createElement("button");
+    remove.className = "upload-file-remove";
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", `Remove ${file.name}`);
+    remove.addEventListener("click", () => {
+      URL.revokeObjectURL(url);
+      uploadedFiles.delete(id);
+      card.remove();
+    });
+    card.append(details, open, remove);
+    $("#uploaded-files").append(card);
+  }
+
+  async function readCsvFile(file) {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const encoding = bytes[0] === 0xff && bytes[1] === 0xfe ? "utf-16le" : "utf-8";
+    return new TextDecoder(encoding).decode(buffer).replace(/^\uFEFF/, "");
+  }
+
+  async function parseDealFile(file) {
+    const extension = file.name.toLowerCase().split(".").pop();
+    if (extension === "csv" || extension === "tsv") return parseCsv(await readCsvFile(file));
+    if (extension !== "xlsx" && extension !== "xls") return [];
+    if (!window.XLSX) throw new Error("Excel support did not load. Refresh the page or save the workbook as CSV.");
+    let workbook;
+    try {
+      workbook = window.XLSX.read(await file.arrayBuffer(), { type: "array" });
+    } catch {
+      throw new Error(`Could not open "${file.name}". Check that it is a valid Excel workbook.`);
+    }
+    const sheetName = workbook.SheetNames.find((name) => workbook.Sheets[name]?.["!ref"]);
+    if (!sheetName) throw new Error(`"${file.name}" has no non-empty worksheets.`);
+    const rows = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "", blankrows: false });
+    const contents = rows.map((cells) => cells.map((cell) => {
+      const value = cell instanceof Date ? cell.toISOString() : String(cell ?? "");
+      return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+    }).join(",")).join("\n");
+    return parseCsv(contents);
+  }
+
+  async function loadDealFiles(fileList) {
+    const files = [...fileList];
+    if (!files.length) return;
+    files.forEach(showUploadedFile);
+    const dataFiles = files.filter((file) => /\.(csv|tsv|xlsx|xls)$/i.test(file.name));
+    if (!dataFiles.length) {
+      $("#upload-status").textContent = `${files.length} file${files.length === 1 ? "" : "s"} added as local attachment${files.length === 1 ? "" : "s"}. CSV/TSV/Excel files with the required columns update dashboards.`;
+      toast("Files added locally. Images, PDFs, and other files are available as attachments.");
+      return;
     }
     try {
-      const records = parseCsv(await file.text());
+      const records = [];
+      for (const file of dataFiles) records.push(...await parseDealFile(file));
+      if (records.length > 200) throw new Error("Import up to 200 startups total per selection so the dashboards remain responsive.");
       if (!$("#screening")) {
         try {
-          sessionStorage.setItem("dealcockpit-pending-deal", JSON.stringify({ records, filename: file.name }));
+          sessionStorage.setItem("dealcockpit-pending-deal", JSON.stringify({ records, filename: dataFiles.map((file) => file.name).join(", ") }));
           location.href = "engines.html#screening";
         } catch {
-          throw new Error("Browser storage is unavailable, so this CSV cannot be passed to the engines page. Open Core engines and import the CSV there.");
+          throw new Error("Browser storage is unavailable, so the spreadsheet data cannot be passed to the engines page. Open Core engines and import it there.");
         }
         return;
       }
-      loadDataset(records, file.name);
+      loadDataset(records, dataFiles.map((file) => file.name).join(", "));
+      const otherCount = files.length - dataFiles.length;
+      $("#upload-status").textContent = `${records.length} startup${records.length === 1 ? "" : "s"} imported into the dashboards; ${files.length} file${files.length === 1 ? "" : "s"} remain available locally. ${otherCount ? `${otherCount} non-spreadsheet file${otherCount === 1 ? "" : "s"} attached for preview.` : "Files were not sent to a server."}`;
     } catch (error) {
       $("#upload-status").textContent = error.message;
       toast(error.message);
@@ -1478,11 +1598,14 @@
     $("#sample-data").addEventListener("click", openSampleDeal);
     $("#sample-portfolio").addEventListener("click", loadSamplePortfolio);
     $("#browse-csv").addEventListener("click", () => $("#csv-file").click());
-    $("#csv-file").addEventListener("change", (event) => loadCsv(event.target.files[0]));
+    $("#csv-file").addEventListener("change", (event) => {
+      loadDealFiles(event.target.files);
+      event.target.value = "";
+    });
     const dropZone = $("#drop-zone");
     ["dragenter", "dragover"].forEach((eventName) => dropZone.addEventListener(eventName, (event) => { event.preventDefault(); dropZone.classList.add("dragging"); }));
     ["dragleave", "drop"].forEach((eventName) => dropZone.addEventListener(eventName, (event) => { event.preventDefault(); dropZone.classList.remove("dragging"); }));
-    dropZone.addEventListener("drop", (event) => loadCsv(event.dataTransfer.files[0]));
+    dropZone.addEventListener("drop", (event) => loadDealFiles(event.dataTransfer.files));
     $("#add-deal").addEventListener("click", addDeal);
     $$("[data-vote]").forEach((button) => button.addEventListener("click", () => {
       const risks = $$(".risk-options input:checked").map((input) => input.value);
