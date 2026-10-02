@@ -56,8 +56,9 @@
         <div class="upload-zone" id="drop-zone">
           <input id="csv-file" type="file" multiple hidden>
           <span class="upload-icon" aria-hidden="true">⇧</span>
-          <span><b>Bring your own files</b><small>Select or drop any files here. CSV, TSV, and Excel spreadsheets update the dashboards; images, PDFs, and other files are kept as local attachments.</small><small id="upload-status" class="micro-note" role="status" aria-live="polite">Spreadsheet rows need all eight model inputs. Files stay on this device; nothing is uploaded to a server.</small></span>
+          <span><b>Bring your own files</b><small>Select or drop files. CSV, TSV, and Excel spreadsheets provide dashboard data; images, PDFs, and other files remain local attachments. Select a spreadsheet, then run it to update the dashboards.</small><small id="upload-status" class="micro-note" role="status" aria-live="polite">Spreadsheet rows need valuation, LTV/CAC, rounds or stage, burn, revenue, funding, and founder experience. Profit margin is optional.</small></span>
           <button id="browse-csv" class="button button-outline" type="button">Browse files</button>
+          <button id="run-analysis" class="button button-primary" type="button" disabled>Run analysis →</button>
           <button id="sample-data" class="button button-quiet" type="button">Load sample deal <span aria-hidden="true">→</span></button>
           <button id="sample-portfolio" class="button button-outline" type="button">Load sample portfolio (4 deals)</button>
         </div>
@@ -98,6 +99,10 @@
         <label>Profit margin (%)<input id="margin" type="number" min="-100" max="100" step="0.1" value="12"></label>
         <p id="validation-message" class="validation-message" aria-live="polite"></p>
       </div>
+      <article id="imported-profile" class="panel imported-profile" hidden>
+        <div class="panel-head"><div><span class="panel-kicker">UPLOADED COMPANY DATA</span><h3 id="imported-profile-company">Company details</h3></div><span class="pill pill-neutral">SOURCE WORKBOOK</span></div>
+        <div id="imported-profile-data" class="imported-profile-grid"></div>
+      </article>
     </section>
 
     <section id="engines" class="section shell">

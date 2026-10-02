@@ -60,6 +60,8 @@
   let importedDatasetName = "";
   let importedStageMixInitialized = false;
   let activeDealId = null;
+  let pendingDataset = null;
+  let uploadGeneration = 0;
 
   function toast(message) {
     const target = $("#toast");
@@ -67,6 +69,14 @@
     target.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => target.classList.remove("show"), 2800);
+  }
+
+  function portfolioStageBucket(model) {
+    const stage = String(model.stage || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (stage.includes("preseed") || stage === "seed") return 0;
+    if (stage === "seriesa") return 1;
+    if (stage.startsWith("series") || stage.includes("growth") || stage.includes("followon")) return 2;
+    return model.rounds <= 1 ? 0 : model.rounds <= 3 ? 1 : 2;
   }
 
   function displayMoney(value, decimals = 1) {
@@ -172,6 +182,7 @@
 
   function getRiskFlags(inputs) {
     const flags = [];
+    const profile = inputs.profile || {};
     if (inputs.ltv < 3) flags.push(["LTV / CAC below 3×", "high"]);
     else flags.push(["Healthy unit economics", "ok"]);
     if (inputs.burn > Math.max(inputs.revenue / 12, 0.35)) flags.push(["Burn exceeds revenue run-rate", ""]);
@@ -179,6 +190,11 @@
     if (inputs.margin < 0) flags.push(["Negative profit margin", "high"]);
     if (inputs.funding > inputs.revenue * 3 && inputs.revenue > 0) flags.push(["Capital efficiency to monitor", ""]);
     if (inputs.revenue === 0) flags.push(["No revenue reported", "high"]);
+    if (Number.isFinite(profile.runwayMonths) && profile.runwayMonths < 9) flags.push(["Reported runway below 9 months", "high"]);
+    if (Number.isFinite(profile.customerChurnPct) && profile.customerChurnPct > 5) flags.push(["Reported monthly churn above 5%", ""]);
+    if (Number.isFinite(profile.revenueGrowthPct) && profile.revenueGrowthPct < 0) flags.push(["Reported revenue is declining", "high"]);
+    if (Number.isFinite(profile.grossMarginPct) && profile.grossMarginPct < 30) flags.push(["Reported gross margin below 30%", ""]);
+    if (/not profitable|pre.?revenue|loss/i.test(profile.profitability || "")) flags.push(["Source reports company is not profitable", ""]);
     return flags.length ? flags.slice(0, 4) : [["No threshold flags detected", "ok"]];
   }
 
@@ -208,15 +224,19 @@
   function recalculate() {
     const inputs = readInputs();
     if (!inputs) return;
-    renderModel(calculate(inputs));
-    syncActiveImportedDeal(inputs);
+    const activeDeal = importedDataset ? deals.find((item) => item.id === activeDealId) : null;
+    const modelInputs = activeDeal
+      ? { ...inputs, profile: activeDeal.model.profile, stage: activeDeal.model.stage }
+      : inputs;
+    renderModel(calculate(modelInputs));
+    syncActiveImportedDeal(modelInputs);
   }
 
   function syncActiveImportedDeal(inputs) {
     if (!importedDataset || !activeDealId) return;
     const deal = deals.find((item) => item.id === activeDealId);
     if (!deal) return;
-    deal.model = { ...inputs, name: deal.name };
+    deal.model = { ...deal.model, ...inputs, profile: deal.model.profile, stage: deal.model.stage, name: deal.name };
     deal.score = Math.round(calculate(deal.model).probability * 100);
     deal.amount = `${displayMoney(deal.model.valuation)}M`;
     deal.sector = `${deal.model.category} · ${pipelineStages[deal.stage]}`;
@@ -230,6 +250,7 @@
     $("#startup-name").textContent = data.name || "Untitled opportunity";
     $("#category").value = categoryOffsets[data.category] ? data.category : "Agritech";
     $("#investor").value = investorOffsets[data.investor] ? data.investor : "Angel";
+    renderImportedProfile(data);
     const map = {
       valuation: data.valuation, "ltv-cac": data.ltv, rounds: data.rounds, burn: data.burn,
       revenue: data.revenue, funding: data.funding, experience: data.experience, margin: data.margin
@@ -261,20 +282,60 @@
       updateWaterfall();
       syncIcScorecard(currentModel);
       if (importedDataset) {
-        $("#waterfall-panel-note").textContent = "CSV does not include legal preference terms or a cap table. This view uses a clearly labeled proxy: one 1× non-participating preference for total funding raised and ownership estimated as funding ÷ valuation. Edit the stack to model a different assumption.";
+        $("#waterfall-panel-note").textContent = "The spreadsheet does not include legal preference terms or a cap table. This view uses a clearly labeled proxy: one 1× non-participating preference for total funding raised and ownership estimated as funding ÷ valuation. Edit the stack to model a different assumption.";
       }
     }
+  }
+
+  function renderImportedProfile(data) {
+    const panel = $("#imported-profile");
+    if (!panel) return;
+    const profile = data.profile;
+    if (!importedDataset || !profile || !Object.values(profile).some((value) => value !== "" && value !== null && value !== undefined)) {
+      panel.hidden = true;
+      return;
+    }
+    const display = [
+      ["Sector", data.category],
+      ["Stage", data.stage],
+      ["Founders", profile.founders],
+      ["Location", profile.location],
+      ["Founded", profile.founded],
+      ["Revenue growth", Number.isFinite(profile.revenueGrowthPct) ? `${profile.revenueGrowthPct}% YoY` : ""],
+      ["Runway", Number.isFinite(profile.runwayMonths) ? `${profile.runwayMonths} months` : ""],
+      ["Gross margin", Number.isFinite(profile.grossMarginPct) ? `${profile.grossMarginPct}%` : ""],
+      ["Monthly recurring revenue", Number.isFinite(profile.mrrMillion) ? `${displayMoney(profile.mrrMillion)}M` : ""],
+      ["Customer growth", Number.isFinite(profile.customerGrowthPct) ? `${profile.customerGrowthPct}% YoY` : ""],
+      ["Monthly churn", Number.isFinite(profile.customerChurnPct) ? `${profile.customerChurnPct}%` : ""],
+      ["Customer acquisition cost", profile.cacRaw],
+      ["Lifetime value", profile.ltvRaw],
+      ["Total addressable market", Number.isFinite(profile.tamMillion) ? `${displayMoney(profile.tamMillion)}M` : ""],
+      ["Market growth", Number.isFinite(profile.marketGrowthPct) ? `${profile.marketGrowthPct}%` : ""],
+      ["Competition", profile.competition],
+      ["Competitive advantage", profile.competitiveAdvantage],
+      ["Business model", profile.businessModel],
+      ["Profitability", profile.profitability],
+      ["Key risk", profile.keyRisk],
+      ["Use of funds", profile.useOfFunds],
+      ["Source profile", profile.testProfile]
+    ].filter(([, value]) => value !== "" && value !== null && value !== undefined);
+    $("#imported-profile-company").textContent = `${data.name || "Imported company"} · Source workbook details`;
+    $("#imported-profile-data").innerHTML = display.map(([label, value]) =>
+      `<div class="imported-profile-item"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`
+    ).join("");
+    panel.hidden = false;
   }
 
   function syncIcScorecard(model) {
     if (!model) return;
     const { inputs, probability } = model;
     const multiple = inputs.revenue > 0 ? inputs.valuation / inputs.revenue : 20;
+    const unitEconomicsMargin = Number.isFinite(inputs.profile?.grossMarginPct) ? inputs.profile.grossMarginPct : inputs.margin;
     icRatings.splice(0, icRatings.length,
       Math.max(1, Math.min(5, Math.round(inputs.experience / 5))),
       Math.max(1, Math.min(5, Math.round(Math.log10(Math.max(1, inputs.revenue)) + 2))),
       Math.max(1, Math.min(5, Math.round(inputs.ltv))),
-      Math.max(1, Math.min(5, Math.round((inputs.ltv + (inputs.margin > 0 ? 1 : 0)) / 2))),
+      Math.max(1, Math.min(5, Math.round((inputs.ltv + (unitEconomicsMargin > 0 ? 1 : 0)) / 2))),
       Math.max(1, Math.min(5, Math.round(6 - Math.min(5, multiple / 4)))),
       Math.max(1, Math.min(5, Math.round(probability * 5)))
     );
@@ -336,7 +397,7 @@
       if (resetImportedStageMix || !importedStageMixInitialized) {
         const stageCounts = [0, 0, 0];
         deals.forEach((deal) => {
-          const inferred = deal.model.rounds <= 1 ? 0 : deal.model.rounds <= 3 ? 1 : 2;
+          const inferred = portfolioStageBucket(deal.model);
           stageCounts[inferred] += 1;
         });
         const stageTotal = stageCounts.reduce((sum, value) => sum + value, 0) || 1;
@@ -345,8 +406,8 @@
         });
         importedStageMixInitialized = true;
       }
-      $(".stage-allocation > .panel-kicker").textContent = "IMPORTED COMPANY MIX · STAGE INFERRED FROM FUNDING ROUNDS";
-      $(".stage-allocation .micro-note").textContent = "Sector exposure and deployment value use imported companies. Stage mix is inferred from funding-round count (0–1 Seed, 2–3 Series A, 4+ follow-on); sliders and return assumptions remain adjustable and illustrative.";
+      $(".stage-allocation > .panel-kicker").textContent = "IMPORTED COMPANY MIX · SOURCE STAGE WHEN AVAILABLE";
+      $(".stage-allocation .micro-note").textContent = "Sector exposure and deployment value use imported companies. Stage comes from the workbook when available; otherwise it is inferred from funding rounds. Sliders and return assumptions remain adjustable and illustrative.";
       updateStageAllocation();
       return;
     }
@@ -600,12 +661,16 @@
     });
     const lowestBurn = Math.min(...results.map((item) => item.burn));
     const highestMultiple = Math.max(...results.map((item) => item.multiple));
+    const uploadedMetrics = importedDataset ? `<tr><th>Stage</th>${results.map(({ deal }) => `<td>${escapeHtml(deal.model.stage || "Not provided")}</td>`).join("")}</tr>
+      <tr><th>Revenue growth</th>${results.map(({ deal }) => `<td>${Number.isFinite(deal.model.profile?.revenueGrowthPct) ? `${deal.model.profile.revenueGrowthPct}%` : "Not provided"}</td>`).join("")}</tr>
+      <tr><th>Runway</th>${results.map(({ deal }) => `<td>${Number.isFinite(deal.model.profile?.runwayMonths) ? `${deal.model.profile.runwayMonths} months` : "Not provided"}</td>`).join("")}</tr>
+      <tr><th>Gross margin</th>${results.map(({ deal }) => `<td>${Number.isFinite(deal.model.profile?.grossMarginPct) ? `${deal.model.profile.grossMarginPct}%` : "Not provided"}</td>`).join("")}</tr>` : "";
     $("#deal-comparison").innerHTML = `<div class="comparison-scroll"><table><thead><tr><th>Metric</th>${results.map(({ deal }) => `<th>${escapeHtml(deal.name)}</th>`).join("")}</tr></thead><tbody>
       <tr><th>Illustrative success odds</th>${results.map(({ model }) => `<td>${Math.round(model.probability * 100)}%</td>`).join("")}</tr>
       <tr><th>Illustrative ROI</th>${results.map(({ model }) => `<td>${model.roi.toFixed(2)}×</td>`).join("")}</tr>
       <tr><th>Monthly burn</th>${results.map((item) => `<td class="${item.burn === lowestBurn ? "compare-best" : ""}">${displayMoney(item.burn)}M${item.burn === lowestBurn ? " · lowest" : ""}</td>`).join("")}</tr>
       <tr><th>Valuation / revenue</th>${results.map((item) => `<td class="${item.multiple === highestMultiple ? "compare-risk" : ""}">${Number.isFinite(item.multiple) ? item.multiple.toFixed(1) + "×" : "n/a"}${item.multiple === highestMultiple ? " · highest" : ""}</td>`).join("")}</tr>
-      <tr><th>Sector</th>${results.map(({ deal }) => `<td>${escapeHtml(deal.sector)}</td>`).join("")}</tr></tbody></table></div>
+      <tr><th>Sector</th>${results.map(({ deal }) => `<td>${escapeHtml(deal.sector)}</td>`).join("")}</tr>${uploadedMetrics}</tbody></table></div>
       <div class="comparison-bars">${results.map(({ deal, model }) => `<div><span>${escapeHtml(deal.name)}</span><i><b style="width:${Math.max(0, Math.min(100, model.roi / Math.max(1, ...results.map((item) => item.model.roi)) * 100))}%"></b></i><strong>${model.roi.toFixed(1)}×</strong></div>`).join("")}</div>
       <p class="micro-note">Lowest burn is highlighted in green; highest valuation/revenue multiple is flagged for review. Outputs use the supplied illustrative demo equations.</p>`;
   }
@@ -756,7 +821,7 @@
   }
 
   function renderCorrelation() {
-    const labels = ["LTV/CAC", importedDataset ? "Valuation" : "Growth", "Margin", "Burn", importedDataset ? "Revenue" : "Founder"];
+    const labels = ["LTV/CAC", importedDataset ? "Valuation" : "Growth", importedDataset ? "Gross / profit margin" : "Margin", "Burn", importedDataset ? "Revenue" : "Founder"];
     let matrix = [
       [1, .42, .31, -.28, .12],
       [.42, 1, .53, -.21, .18],
@@ -768,7 +833,7 @@
       const fields = [
         (deal) => deal.model.ltv,
         (deal) => deal.model.valuation,
-        (deal) => deal.model.margin,
+        (deal) => Number.isFinite(deal.model.profile?.grossMarginPct) ? deal.model.profile.grossMarginPct : deal.model.margin,
         (deal) => deal.model.burn,
         (deal) => deal.model.revenue
       ];
@@ -785,7 +850,7 @@
         return varianceX && varianceY ? Math.max(-1, Math.min(1, covariance / Math.sqrt(varianceX * varianceY))) : NaN;
       }));
       $(".correlation-panel .panel-description").textContent = deals.length > 1
-        ? `Pearson correlations calculated from ${deals.length} imported companies. Correlation is descriptive and does not imply causation.`
+        ? `Pearson correlations calculated from ${deals.length} imported companies. Margin uses reported gross margin when available; otherwise it uses the model profit-margin input. Descriptive only, not causal.`
         : "Import at least two companies with different values in each metric to calculate dataset correlations.";
     } else {
       $(".correlation-panel .panel-description").textContent = "Illustrative input correlations; not calculated from a real dataset.";
@@ -855,6 +920,8 @@
 
   function openSampleDeal() {
     if ($("#screening")) {
+      pendingDataset = null;
+      if ($("#run-analysis")) $("#run-analysis").disabled = true;
       setFormData(sample);
       toast("Northstar AI sample loaded.");
       return;
@@ -946,21 +1013,42 @@
       revenue: ["revenue", "annualrevenue", "annualrevenuem", "annualrevenueusdm", "annualrevenuecr", "arr"],
       funding: ["funding", "fundingraised", "fundingraisedm", "fundingraisedusdm", "totalfunding", "totalfundingm", "totalfundingraisedcr"],
       experience: ["experience", "founderexperience", "founderexperienceyears"],
-      margin: ["margin", "profitmargin", "profitmarginpercent", "profitmarginpct", "grossmargin"]
+      margin: ["margin", "profitmargin", "profitmarginpercent", "profitmarginpct", "netprofitmargin", "netprofitmarginpercent"],
+      founded: ["founded", "foundedyear", "yearfounded"],
+      location: ["location", "headquarters", "city"],
+      founders: ["founders", "founder"],
+      revenueGrowthPct: ["revenuegrowth", "revenuegrowthyoy", "yoyrevenuegrowth"],
+      mrrMillion: ["mrr", "mrrcr", "monthlyrecurringrevenue", "monthlyrecurringrevenuecr"],
+      grossMarginPct: ["grossmargin", "grossmarginpercent", "grossmarginpct"],
+      runwayMonths: ["runway", "runwaymonths"],
+      customerGrowthPct: ["customergrowth", "customergrowthyoy", "yoycustomergrowth"],
+      cacRaw: ["cac", "customeracquisitioncost"],
+      ltvRaw: ["ltv", "lifetimevalue"],
+      customerChurnPct: ["churn", "monthlychurn", "monthlychurnpercent"],
+      tamMillion: ["tam", "tamcr", "tamm", "totaladdressablemarket", "totaladdressablemarketcr"],
+      marketGrowthPct: ["marketgrowth", "marketgrowthpercent"],
+      competition: ["competition", "competitivelandscape"],
+      competitiveAdvantage: ["competitiveadvantage", "moat"],
+      businessModel: ["businessmodel", "revenuebusinessmodel"],
+      profitability: ["profitability", "profitabilitystatus"],
+      keyRisk: ["keyrisk", "primaryrisk", "mainrisk"],
+      useOfFunds: ["useoffunds", "useofcapital"],
+      testProfile: ["testprofile", "profile", "investmentprofile"]
     };
     const columns = {};
     Object.entries(aliases).forEach(([key, options]) => {
       columns[key] = headers.findIndex((header) => options.includes(normalize(header)));
     });
     const formMap = { valuation: "valuation", ltv: "ltv-cac", rounds: "rounds", burn: "burn", revenue: "revenue", funding: "funding", experience: "experience", margin: "margin" };
-    const requiredFields = Object.keys(formMap);
+    const requiredFields = Object.keys(formMap).filter((key) => key !== "margin");
     const missing = requiredFields.filter((key) => columns[key] < 0 && !(key === "rounds" && columns.stage >= 0));
     if (missing.length) {
-      throw new Error(`CSV is missing required model columns: ${missing.join(", ")}. Include valuation, ltv_cac, rounds, burn, revenue, funding, experience, and margin.`);
+      throw new Error(`CSV is missing required model columns: ${missing.join(", ")}. Include valuation, ltv_cac, rounds or stage, burn, revenue, funding, and experience. Profit margin is optional.`);
     }
     const categories = Object.keys(categoryOffsets);
     const investors = Object.keys(investorOffsets);
     let convertedInrUnits = false;
+    const profileTextFields = new Set(["founded", "location", "founders", "cacRaw", "ltvRaw", "competition", "competitiveAdvantage", "businessModel", "profitability", "keyRisk", "useOfFunds", "testProfile"]);
     const records = rows.slice(1).map((sourceCells, index) => {
       const line = index + 2;
       const cells = [...sourceCells];
@@ -968,25 +1056,54 @@
       while (cells.length < headers.length) cells.push("");
       if (cells.length !== headers.length) throw new Error(`CSV row ${line} has ${cells.length} values; expected ${headers.length}.`);
       const record = {};
+      const profile = {};
       Object.entries(columns).forEach(([key, column]) => {
         if (column < 0 || cells[column] === "") return;
         if (key === "name" || key === "category" || key === "investor" || key === "stage") {
           record[key] = cells[column];
           return;
         }
-        record[key] = parseNumericCell(cells[column]);
         const header = headers[column];
+        if (profileTextFields.has(key)) {
+          profile[key] = cells[column];
+          return;
+        }
+        const value = parseNumericCell(cells[column]);
+        if (key === "mrrMillion" || key === "tamMillion") {
+          profile[key] = value;
+          if (/(?:cr|crore)s?$/.test(header)) {
+            profile[key] *= 10 / 83;
+            convertedInrUnits = true;
+          }
+          return;
+        }
         if (["valuation", "revenue", "funding"].includes(key) && /(?:cr|crore)s?$/.test(header)) {
-          record[key] *= 10 / 83;
+          record[key] = value * 10 / 83;
           convertedInrUnits = true;
         } else if (key === "burn" && /lakh/.test(header)) {
-          record[key] *= 0.1 / 83;
+          record[key] = value * 0.1 / 83;
           convertedInrUnits = true;
+        } else if (key === "experience") {
+          record[key] = value;
+        } else if (key === "mrrMillion" || key === "tamMillion") {
+          profile[key] = value;
+        } else if (key.endsWith("Pct") || key === "runwayMonths") {
+          profile[key] = value;
+        } else {
+          record[key] = value;
         }
       });
+      record.margin ??= 0;
+      if (profile.revenueGrowthPct !== undefined) profile.revenueGrowthPct = parseNumericCell(profile.revenueGrowthPct);
+      if (profile.grossMarginPct !== undefined) profile.grossMarginPct = parseNumericCell(profile.grossMarginPct);
+      if (profile.runwayMonths !== undefined) profile.runwayMonths = parseNumericCell(profile.runwayMonths);
+      if (profile.customerGrowthPct !== undefined) profile.customerGrowthPct = parseNumericCell(profile.customerGrowthPct);
+      if (profile.customerChurnPct !== undefined) profile.customerChurnPct = parseNumericCell(profile.customerChurnPct);
+      if (profile.marketGrowthPct !== undefined) profile.marketGrowthPct = parseNumericCell(profile.marketGrowthPct);
+      record.profile = profile;
       if (record.rounds === undefined && record.stage) record.rounds = roundsForStage(record.stage);
       if (requiredFields.some((key) => record[key] === undefined)) {
-        throw new Error(`CSV row ${line} is missing a required model value. Each startup needs all eight model inputs.`);
+        throw new Error(`CSV row ${line} is missing a required model value. Each startup needs valuation, LTV/CAC, rounds or stage, burn, revenue, funding, and founder experience.`);
       }
       if (Object.entries(formMap).some(([key, id]) => {
         const value = record[key];
@@ -1011,6 +1128,7 @@
         if (!match) throw new Error(`CSV row ${line}: unknown investor type "${record.investor}". Use Angel, Early-Stage VC, Growth VC, or Corporate VC.`);
         record.investor = match;
       }
+      record.investor ||= investorForStage(record.stage);
       record.name = (record.name || `Startup ${index + 1}`).slice(0, 50);
       record.category = record.category || sample.category;
       record.investor = record.investor || sample.investor;
@@ -1020,8 +1138,8 @@
     });
     if (records.length > 200) throw new Error("Import up to 200 startups per CSV so the dashboards remain responsive.");
     records.importNotes = convertedInrUnits ? ["INR crore/lakh values were converted to USD millions using the app's illustrative fixed rate of ₹83 per USD."] : [];
-    if (headers.includes("grossmargin") && !headers.some((header) => ["margin", "profitmargin", "profitmarginpercent", "profitmarginpct"].includes(header))) {
-      records.importNotes.push("Gross margin is used as a proxy for profit margin because the workbook does not include a numeric profit-margin field; model scores may differ.");
+    if (columns.margin < 0) {
+      records.importNotes.push("Profit margin is not supplied; the model uses 0% rather than treating gross margin as net profit margin.");
     }
     return records;
   }
@@ -1046,6 +1164,11 @@
     if (normalized === "seriesb") return 3;
     if (normalized === "seriesc" || normalized.includes("growth") || normalized.includes("followon")) return 4;
     return 1;
+  }
+
+  function investorForStage(stage) {
+    const rounds = roundsForStage(stage);
+    return rounds <= 1 ? "Angel" : rounds === 2 ? "Early-Stage VC" : "Growth VC";
   }
 
   function showUploadedFile(file) {
@@ -1136,13 +1259,17 @@
   async function loadDealFiles(fileList) {
     const files = [...fileList];
     if (!files.length) return;
+    const generation = ++uploadGeneration;
+    pendingDataset = null;
+    $("#run-analysis").disabled = true;
     files.forEach(showUploadedFile);
     const dataFiles = files.filter((file) => /\.(csv|tsv|xlsx|xls)$/i.test(file.name));
     if (!dataFiles.length) {
-      $("#upload-status").textContent = `${files.length} file${files.length === 1 ? "" : "s"} added as local attachment${files.length === 1 ? "" : "s"}. CSV/TSV/Excel files with the required columns update dashboards.`;
-      toast("Files added locally. Images, PDFs, and other files are available as attachments.");
+      $("#upload-status").textContent = `${files.length} file${files.length === 1 ? "" : "s"} added as local attachment${files.length === 1 ? "" : "s"}. Select a CSV, TSV, or Excel spreadsheet to prepare dashboard analysis.`;
+      toast("Attachments added locally. Select a spreadsheet to prepare an analysis.");
       return;
     }
+    $("#upload-status").textContent = `Reading ${dataFiles.length} spreadsheet${dataFiles.length === 1 ? "" : "s"}… the current dashboards will stay unchanged until you run the analysis.`;
     try {
       const records = [];
       const importNotes = [];
@@ -1151,6 +1278,7 @@
         records.push(...parsed);
         importNotes.push(...(parsed.importNotes || []));
       }
+      if (generation !== uploadGeneration) return;
       if (records.length > 200) throw new Error("Import up to 200 startups total per selection so the dashboards remain responsive.");
       if (!$("#screening")) {
         try {
@@ -1161,13 +1289,38 @@
         }
         return;
       }
-      loadDataset(records, dataFiles.map((file) => file.name).join(", "));
       const otherCount = files.length - dataFiles.length;
-      $("#upload-status").textContent = `${records.length} startup${records.length === 1 ? "" : "s"} imported into the dashboards. ${files.length} selected file${files.length === 1 ? " is" : "s are"} kept locally in this browser. ${importNotes.join(" ")} ${otherCount ? `${otherCount} non-spreadsheet file${otherCount === 1 ? "" : "s"} attached for preview.` : "Files were not sent to a server."}`;
+      pendingDataset = {
+        records,
+        filename: dataFiles.map((file) => file.name).join(", "),
+        importNotes,
+        selectedFileCount: files.length,
+        otherFileCount: otherCount
+      };
+      $("#run-analysis").disabled = false;
+      $("#upload-status").textContent = `${records.length} startup${records.length === 1 ? "" : "s"} ready. Click “Run analysis” to update every relevant dashboard. ${importNotes.join(" ")} ${otherCount ? `${otherCount} other file${otherCount === 1 ? "" : "s"} will remain attached locally.` : ""}`;
+      toast(`${records.length} startup${records.length === 1 ? "" : "s"} ready to analyze.`);
     } catch (error) {
+      if (generation !== uploadGeneration) return;
+      pendingDataset = null;
+      $("#run-analysis").disabled = true;
       $("#upload-status").textContent = error.message;
       toast(error.message);
     }
+  }
+
+  function runPendingAnalysis() {
+    if (!pendingDataset) {
+      $("#upload-status").textContent = "Select a valid CSV, TSV, or Excel spreadsheet before running analysis.";
+      return toast("Select a spreadsheet first.");
+    }
+    const pending = pendingDataset;
+    pendingDataset = null;
+    $("#run-analysis").disabled = true;
+    loadDataset(pending.records, pending.filename);
+    $("#upload-status").textContent = `${pending.records.length} startup${pending.records.length === 1 ? "" : "s"} analyzed across the dashboards. ${pending.selectedFileCount} selected file${pending.selectedFileCount === 1 ? " remains" : "s remain"} in this browser only. ${pending.importNotes.join(" ")} ${pending.otherFileCount ? `${pending.otherFileCount} non-spreadsheet attachment${pending.otherFileCount === 1 ? "" : "s"} are available locally.` : "Files were not sent to a server."}`;
+    $("#screening").scrollIntoView({ behavior: "smooth", block: "start" });
+    toast(`Analysis complete: ${pending.records.length} companies now drive the dashboards.`);
   }
 
   function pipelineStageForRecord(record) {
@@ -1184,6 +1337,8 @@
   }
 
   function loadDataset(records, filename = "Imported CSV") {
+    pendingDataset = null;
+    if ($("#run-analysis")) $("#run-analysis").disabled = true;
     importedDataset = true;
     importedDatasetName = filename;
     importedStageMixInitialized = false;
@@ -1251,7 +1406,7 @@
     const comparison = deals.filter((deal) => selectedDeals.has(deal.id)).map((deal) => {
       const result = calculate(deal.model);
       return {
-        company: deal.name, sector: deal.sector, pipelineStage: pipelineStages[deal.stage],
+        company: deal.name, sector: deal.sector, pipelineStage: pipelineStages[deal.stage], sourceDetails: deal.model.profile || {},
         valuationMillion: deal.model.valuation, monthlyBurnMillion: deal.model.burn,
         annualRevenueMillion: deal.model.revenue,
         illustrativeSuccessProbabilityPercent: Math.round(result.probability * 100),
@@ -1276,7 +1431,8 @@
         valuationMillion: inputs.valuation, ltvCac: inputs.ltv, fundingRounds: inputs.rounds,
         monthlyBurnMillion: inputs.burn, annualRevenueMillion: inputs.revenue,
         fundingRaisedMillion: inputs.funding, founderExperienceYears: inputs.experience,
-        profitMarginPercent: inputs.margin
+        profitMarginPercent: inputs.margin,
+        sourceCompanyDetails: inputs.profile || {}
       },
       illustrativeSuccessProbabilityPercent: Math.round(probability * 100),
       illustrativeRoiMultiple: Number(roi.toFixed(2)),
@@ -1306,7 +1462,7 @@
         dealPipeline: deals.slice(0, 12).map((deal) => ({
           company: deal.name, sector: deal.sector, stage: pipelineStages[deal.stage],
           score: deal.score, valuationMillion: deal.model.valuation, monthlyBurnMillion: deal.model.burn,
-          annualRevenueMillion: deal.model.revenue
+          annualRevenueMillion: deal.model.revenue, sourceDetails: deal.model.profile || {}
         })),
         sensitivity: selectedStress ? {
           revenueGrowthShockPercent: Number(selectedStress.dataset.growth),
@@ -1416,7 +1572,7 @@
 
   function localSupportAnswer(question) {
     const text = question.toLowerCase();
-    if (/csv|upload|import|spreadsheet/.test(text)) return "Open Core engines. Use “Bring your own deal data” to browse for or drop a .csv file. The first data row is imported; use headers such as name, category, investor, valuation, ltv_cac, rounds, burn, revenue, funding, experience, and margin.";
+    if (/csv|upload|import|spreadsheet|excel|xlsx/.test(text)) return "Open Core engines and use Browse files to select CSV, TSV, or Excel files, then click Run analysis. Spreadsheet rows with supported headers update screening, the pipeline, allocation, comparisons, and other relevant dashboards; the active company profile displays additional source fields. Missing profit margin is treated as 0%, not substituted with gross margin. PDFs/images are local attachments only.";
     if (/page|website|open|localhost|server|start|run/.test(text)) return "Start the local PowerShell server from the project folder with `powershell -ExecutionPolicy Bypass -File .\\server.ps1`, then open http://localhost:8000. If you only need the static site, use `python -m http.server 8000` (Python must be installed); the AI needs server.ps1 and an API key.";
     if (/theme|light|dark|appearance/.test(text)) return "Use the sun/moon button in the top-right of any page. Your theme preference is saved in this browser.";
     if (/currency|exchange|rate|money/.test(text)) return "The currency selector changes a few displayed summary values using fixed illustrative rates. It is not live foreign-exchange data.";
@@ -1635,6 +1791,7 @@
     $("#sample-data").addEventListener("click", openSampleDeal);
     $("#sample-portfolio").addEventListener("click", loadSamplePortfolio);
     $("#browse-csv").addEventListener("click", () => $("#csv-file").click());
+    $("#run-analysis").addEventListener("click", runPendingAnalysis);
     $("#csv-file").addEventListener("change", (event) => {
       loadDealFiles(event.target.files);
       event.target.value = "";
