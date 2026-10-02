@@ -989,7 +989,12 @@
   }
 
   async function loadCsv(file) {
-    if (!file || (!file.name.toLowerCase().endsWith(".csv") && file.type !== "text/csv")) return toast("Choose a CSV file to load startup data.");
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv") && file.type !== "text/csv") {
+      const message = "This file type isn't supported yet. Choose a .csv file to load startup data.";
+      $("#upload-status").textContent = message;
+      return toast(message);
+    }
     try {
       const records = parseCsv(await file.text());
       if (!$("#screening")) {
