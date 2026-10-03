@@ -1113,6 +1113,7 @@
       renderBenchmarks();
       renderCorrelation();
       if (workspaceState?.model) saveWorkspaceState();
+      $("#screening").scrollIntoView({ behavior: "smooth", block: "start" });
       toast(`${preset.name} demo preset loaded.`);
       return;
     }
