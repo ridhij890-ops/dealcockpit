@@ -16,31 +16,32 @@
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
-    <a class="brand" href="#home" aria-label="DealCockpit home">
+    <a class="brand" href="index.html" aria-label="Return to DealCockpit landing page">
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M7 8h11c9 0 15 5 15 12S27 32 18 32H7V8Zm8 7v10h3c4 0 7-2 7-5s-3-5-7-5h-3Z" fill="currentColor"/><circle cx="31" cy="9" r="3" fill="#52e0e8"/></svg></span>
       <span>Deal<span class="brand-light">Cockpit</span><small>VENTURE INTELLIGENCE</small></span>
     </a>
     <nav class="main-nav" aria-label="Main navigation">
-      <a href="index.html">Home</a><a href="features.html">Features</a><a href="engines.html" aria-current="page">Core engines</a><a href="about.html">About</a>
+      <a href="index.html">Return to landing</a><a href="features.html">Features</a><a href="about.html">About</a>
     </nav>
     <div class="header-actions">
+      <button id="header-search-trigger" class="command-trigger" type="button" aria-label="Search DealCockpit (Ctrl+K or Command+K)"><span aria-hidden="true">⌕</span><span class="command-trigger-label">Search</span><kbd>Ctrl K</kbd></button>
       <label class="sr-only" for="currency">Display currency</label>
       <select id="currency" class="currency-select" aria-label="Display currency">
         <option value="USD">USD $</option><option value="INR">INR ₹</option><option value="EUR">EUR €</option><option value="GBP">GBP £</option>
       </select>
       <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to light theme" title="Toggle theme"><span aria-hidden="true">☼</span></button>
-      <a class="button button-primary header-cta" href="engines.html#screening">Launch engine <span aria-hidden="true">↗</span></a>
+      <a id="launch-engine" class="button button-primary header-cta" href="#screening">Launch engine <span aria-hidden="true">↗</span></a>
       <button id="menu-toggle" class="icon-button menu-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false">☰</button>
     </div>
   </header>
 
   <main id="main">
-    <section class="hero shell" id="home">
+    <section class="hero shell workspace-hero" id="home">
       <div class="hero-copy">
-        <div class="eyebrow"><span class="status-dot"></span> THE INVESTOR'S OPERATING SYSTEM</div>
-        <h1>See the signal.<br><span>Back the future.</span></h1>
-        <p class="hero-lede">A sharper lens on early-stage companies. Screen opportunities, stress-test assumptions, and bring conviction to every investment conversation.</p>
-        <div class="hero-buttons"><a class="button button-primary" href="#screening">Explore the cockpit <span aria-hidden="true">→</span></a><a href="features.html" class="text-link">See product features <span aria-hidden="true">↗</span></a></div>
+        <div class="eyebrow"><span class="status-dot"></span> DEAL UNDERWRITING WORKSPACE</div>
+        <h1>Screen the deal.<br><span>Stress-test conviction.</span></h1>
+        <p class="hero-lede">Evaluate an opportunity, pressure-test operating assumptions, model capital outcomes, and prepare for a disciplined IC discussion.</p>
+        <div class="hero-buttons"><a class="button button-primary" href="#screening">Open screening <span aria-hidden="true">→</span></a><a href="index.html" class="text-link">Return to landing <span aria-hidden="true">↗</span></a></div>
         <div class="hero-proof"><div class="avatar-stack"><span>R</span><span>A</span><span class="proof-icon">✳</span></div><p>Built by finance minds.<br><b>Designed for decisive teams.</b></p></div>
       </div>
       <div class="hero-visual">
@@ -76,6 +77,17 @@
       <div><span class="eyebrow">QUANTITATIVE CO-PILOT · HUMAN DECISION-MAKER</span><h2>Standardize the pre-screen. Keep judgment in the room.</h2></div>
       <p>Use the illustrative equations to surface unit-economic and burn risks, structure triage, and challenge assumptions. They complement—not replace—qualitative IC work: bottom-up TAM, product defensibility, founder references, and power-law upside. This demo does not eliminate cognitive bias, train an ML model, or provide a decision recommendation.</p>
     </section>
+
+    <div class="workspace-shell">
+      <nav class="workspace-tabs shell" role="tablist" aria-label="Deal analysis workspace">
+        <button id="workspace-tab-screening" type="button" role="tab" aria-controls="workspace-panel-screening" aria-selected="true" data-workspace-tab="screening"><span>01</span> Screening</button>
+        <button id="workspace-tab-scenario" type="button" role="tab" aria-controls="workspace-panel-scenario" aria-selected="false" tabindex="-1" data-workspace-tab="scenario"><span>02</span> Stress test</button>
+        <button id="workspace-tab-capital" type="button" role="tab" aria-controls="workspace-panel-capital" aria-selected="false" tabindex="-1" data-workspace-tab="capital"><span>03</span> Capital tools</button>
+        <button id="workspace-tab-pipeline" type="button" role="tab" aria-controls="workspace-panel-pipeline" aria-selected="false" tabindex="-1" data-workspace-tab="pipeline"><span>04</span> Deal flow</button>
+        <button id="workspace-tab-committee" type="button" role="tab" aria-controls="workspace-panel-committee" aria-selected="false" tabindex="-1" data-workspace-tab="committee"><span>05</span> IC &amp; analyst</button>
+      </nav>
+      <div id="workspace-panels" class="workspace-panels shell"></div>
+    </div>
 
     <section id="screening" class="section shell">
       <div class="section-heading"><div><div class="eyebrow">01 / DEAL SCREENING</div><h2>Start with the <span>signal.</span></h2></div><div class="memo-actions"><button id="download-memo" class="button button-outline" type="button">↓ Download Markdown memo</button><button id="print-ic-memo" class="button button-primary" type="button">▤ Print / save IC memo PDF</button></div></div>
@@ -152,7 +164,7 @@
       <div class="section-heading"><div><div class="eyebrow">03 / TWO-WAY STRESS TEST</div><h2>Stress-test two assumptions <span>at once.</span></h2></div><p>Illustrative ROI across revenue-growth and burn shocks. Select a cell to inspect its demo survival odds and runway.</p></div>
       <article class="panel sensitivity-panel">
         <div class="panel-head"><div><span class="panel-kicker">5 × 5 RETURN SENSITIVITY</span><h3>Revenue growth vs. monthly burn</h3></div><span class="pill pill-neutral">ILLUSTRATIVE · NOT FORECAST</span></div>
-        <label class="mobile-sensitivity-control" for="sensitivity-growth">Revenue-growth scenario<select id="sensitivity-growth"><option value="-40">−40% revenue growth</option><option value="-20">−20% revenue growth</option><option value="0" selected>Base revenue growth</option><option value="20">+20% revenue growth</option><option value="40">+40% revenue growth</option></select></label>
+        <label class="mobile-sensitivity-control" for="sensitivity-growth">Revenue-growth scenario<select id="sensitivity-growth"><option value="-50">−50% revenue growth</option><option value="-20">−20% revenue growth</option><option value="0" selected>Base revenue growth</option><option value="50">+50% revenue growth</option><option value="100">+100% revenue growth</option></select></label>
         <div id="sensitivity-heatmap" class="sensitivity-heatmap" role="grid" aria-label="ROI sensitivity matrix"></div>
         <div id="sensitivity-detail" class="sensitivity-detail" aria-live="polite">Choose a stress-grid cell to inspect the scenario.</div>
         <div class="heatmap-legend"><span>Lower modeled ROI</span><i></i><span>Higher modeled ROI</span></div>
@@ -251,11 +263,11 @@
           <div class="vote-actions"><button data-vote="strong" class="vote-button vote-button-yes" type="button">✓ Strong buy</button><button data-vote="conditional" class="vote-button vote-button-abstain" type="button">◐ Conditional buy</button><button data-vote="pass" class="vote-button vote-button-no" type="button">× Pass</button></div>
           <p id="vote-confirmation" class="micro-note" aria-live="polite">Select at least one risk justification, then cast a demo vote. Votes are local to this browser.</p>
         </article>
-        <article class="panel benchmark-panel"><div class="panel-head"><div><span class="panel-kicker">MODEL BENCHMARKS</span><h3>Context, not certainty</h3></div></div><p class="panel-description">Illustrative comparison against simple screening baselines.</p><div id="benchmark-bars" class="benchmark-bars"></div><p class="micro-note">Illustrative demo metrics only; not validated backtesting or investment performance.</p></article>
+        <article class="panel benchmark-panel"><div class="panel-head"><div><span class="panel-kicker">MODEL BENCHMARKS</span><h3>Context, not certainty</h3></div></div><p class="panel-description">Illustrative comparison against simple screening baselines.</p><div id="benchmark-bars" class="benchmark-bars"></div><p class="micro-note">Illustrative demo metrics only; not validated backtesting or investment performance.</p><details class="ensemble-disclosure"><summary>Model coverage &amp; ensemble availability</summary><p>The active probability uses the supplied logistic equation; ROI uses the supplied linear equation. A constant baseline, revenue-only rule, and (when a spreadsheet is loaded) dataset summaries are shown for context only.</p><p>Decision-tree, XGBoost, random-forest, and neural-network models are not included or run. There is no ensemble consensus, trained model, historical backtest, or SHAP calculation in this static demo.</p></details></article>
       </div>
       <div class="bottom-grid">
         <article class="panel correlation-panel"><div class="panel-head"><div><span class="panel-kicker">FEATURE RELATIONSHIPS</span><h3>Correlation snapshot</h3></div></div><p class="panel-description">Illustrative input correlations; not calculated from a real dataset.</p><div id="correlation-matrix" class="correlation-matrix"></div></article>
-        <article class="panel chat-panel">
+        <article id="assistant-chat" class="panel chat-panel">
           <div class="panel-head"><div><span class="panel-kicker">DEALCOCKPIT ASSISTANT</span><h3 id="assistant-title">Ask the analyst</h3></div><span class="online-pill offline" id="ai-status"><i></i><span>CHECKING AI</span></span></div>
           <div class="assistant-toolbar"><div class="assistant-tabs" role="tablist" aria-label="Assistant mode"><button type="button" class="assistant-tab active" role="tab" aria-selected="true" data-chat-mode="analyst">Deal analyst</button><button type="button" class="assistant-tab" role="tab" aria-selected="false" data-chat-mode="helpdesk">Help desk</button></div><button type="button" class="clear-chat" id="clear-chat">Clear chat</button></div>
           <details class="ai-key-settings">
@@ -280,6 +292,7 @@
 
   </main>
 
+  <button id="assistant-launcher" class="assistant-launcher" type="button" aria-label="Open the DealCockpit analyst in the IC workspace"><span class="assistant-launcher-avatar" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M4 13 3 4l9 5m7 0 9-5-1 9" fill="#d5e9eb" stroke="#243f4e" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 31c1-7 5-10 13-10s12 3 13 10" fill="#102839"/><path d="m12 22 4 3 4-3-2 8h-4z" fill="#52e0e8"/><circle cx="16" cy="15" r="11" fill="#aabfc1" stroke="#243f4e" stroke-width="1.5"/><circle cx="11.5" cy="15" r="4" fill="#f3f3df"/><circle cx="20.5" cy="15" r="4" fill="#f3f3df"/><circle cx="12" cy="15" r="1.4" fill="#162d3b"/><circle cx="20" cy="15" r="1.4" fill="#162d3b"/><path d="m15 18 2 0-1 2z" fill="#d89a5c"/></svg></span><span>Ask analyst</span></button>
   <footer class="footer shell"><a class="brand footer-brand" href="index.html"><span class="brand-mark">◈</span><span>Deal<span class="brand-light">Cockpit</span><small>VENTURE INTELLIGENCE</small></span></a><span>Illustrative demo · Not investment advice</span><div><a href="about.html">About</a><button type="button" id="open-shortcuts">⌘K shortcuts</button></div></footer>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

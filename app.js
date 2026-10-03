@@ -634,8 +634,8 @@
   function renderSensitivity() {
     const host = $("#sensitivity-heatmap");
     if (!host || !currentModel) return;
-    const growthShocks = [-40, -20, 0, 20, 40];
-    const burnShocks = [-30, -15, 0, 15, 30];
+    const growthShocks = [-50, -20, 0, 50, 100];
+    const burnShocks = [-50, -20, 0, 50, 100];
     const scenarios = [];
     growthShocks.forEach((growth) => burnShocks.forEach((burnChange) => {
       const inputs = { ...currentModel.inputs, revenue: Math.max(0, currentModel.inputs.revenue * (1 + growth / 100)), burn: Math.max(0, currentModel.inputs.burn * (1 + burnChange / 100)) };
@@ -978,16 +978,15 @@
       metrics = [
         ["Active imported deal", score, true], ["Dataset average", Math.round(mean), false],
         ["Simple revenue rule", Math.min(78, Math.round(43 + Math.min(35, (Number($("#revenue").value) || 0) * 2))), false],
-        ["Dataset median", Math.round(median), false]
+        ["Dataset median", Math.round(median), false], ["Constant baseline", 50, false]
       ];
       $(".benchmark-panel .panel-description").textContent = `Illustrative score comparisons across ${deals.length} imported startups; these are not validated predictive benchmarks.`;
     } else {
       metrics = [
-        ["DealCockpit demo", score, true], ["Sector baseline", 52, false],
-        ["Simple revenue rule", Math.min(78, Math.round(43 + Math.min(35, (Number($("#revenue").value) || 0) * 2))), false],
-        ["Median screen", 48, false]
+        ["Supplied logistic equation", score, true], ["Constant baseline", 50, false],
+        ["Revenue-only rule of thumb", Math.min(78, Math.round(43 + Math.min(35, (Number($("#revenue").value) || 0) * 2))), false]
       ];
-      $(".benchmark-panel .panel-description").textContent = "Illustrative comparison against simple screening baselines.";
+      $(".benchmark-panel .panel-description").textContent = "A supplied equation compared with transparent, non-trained reference rules.";
     }
     $("#benchmark-bars").innerHTML = metrics.map(([name, value, current]) => `<div class="benchmark-row ${current ? "current" : ""}"><span>${name}</span><div class="benchmark-track"><i style="width:${value}%"></i></div><b>${value}</b></div>`).join("");
   }
@@ -1088,7 +1087,10 @@
     renderCommands();
     $("#command-input").focus();
   }
-  function closeCommand() { $("#command-overlay").hidden = true; $("#open-shortcuts").focus(); }
+  function closeCommand() {
+    $("#command-overlay").hidden = true;
+    ($("#header-search-trigger") || $("#open-shortcuts")).focus();
+  }
 
   function openSampleDeal() {
     loadSamplePreset("enterprise");
@@ -1098,6 +1100,7 @@
     const preset = samplePresets[name];
     if (!preset) return toast("Choose one of the available demo presets.");
     if ($("#screening")) {
+      $("#workspace-tab-screening")?.click();
       pendingDataset = null;
       if ($("#run-analysis")) $("#run-analysis").disabled = true;
       importedDataset = false;
@@ -1915,6 +1918,7 @@
 
   function initShared() {
     workspaceState = restoreWorkspaceState();
+    $("#header-search-trigger")?.addEventListener("click", openCommand);
     $("#theme-toggle").addEventListener("click", () => {
       const light = document.documentElement.dataset.theme !== "light";
       document.documentElement.dataset.theme = light ? "light" : "dark";
@@ -1954,9 +1958,110 @@
     });
   }
 
+  const workspaceSectionGroups = {
+    screening: ["screening", "market"],
+    scenario: ["engines", "sensitivity"],
+    capital: ["capital-tools", "term-sheet"],
+    pipeline: ["pipeline", "compare-deals", "pitch-brief"],
+    committee: ["ic"]
+  };
+
+  function initWorkspaceTabs() {
+    const host = $("#workspace-panels");
+    const tabs = $$("[data-workspace-tab]");
+    const panels = new Map();
+    const sectionTabs = new Map();
+
+    Object.entries(workspaceSectionGroups).forEach(([key, sectionIds]) => {
+      const panel = document.createElement("div");
+      panel.id = `workspace-panel-${key}`;
+      panel.className = "workspace-tab-panel";
+      panel.setAttribute("role", "tabpanel");
+      panel.setAttribute("aria-labelledby", `workspace-tab-${key}`);
+      panel.tabIndex = 0;
+      panel.hidden = true;
+      sectionIds.forEach((id) => {
+        const section = document.getElementById(id);
+        if (!section) throw new Error(`Workspace section #${id} is missing.`);
+        panel.appendChild(section);
+        sectionTabs.set(id, key);
+      });
+      host.appendChild(panel);
+      panels.set(key, panel);
+    });
+
+    function activate(key, { focus = false, scroll = false, persist = true } = {}) {
+      if (!panels.has(key)) return false;
+      tabs.forEach((tab) => {
+        const selected = tab.dataset.workspaceTab === key;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      panels.forEach((panel, panelKey) => { panel.hidden = panelKey !== key; });
+      if (persist) {
+        try { localStorage.setItem("dealcockpit-active-workspace-tab", key); } catch { /* The tab remains selected for this page view. */ }
+      }
+      if (focus) $(`[data-workspace-tab="${key}"]`).focus();
+      if (scroll) $("#workspace-panels").scrollIntoView({ behavior: "smooth", block: "start" });
+      return true;
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => activate(tab.dataset.workspaceTab, { focus: true, scroll: true }));
+      tab.addEventListener("keydown", (event) => {
+        let next = index;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length;
+        else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        activate(tabs[next].dataset.workspaceTab, { focus: true });
+      });
+    });
+
+    function activateFromHash() {
+      const targetId = location.hash.slice(1);
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      const section = target?.closest("section");
+      const key = sectionTabs.get(section?.id);
+      if (!key) return;
+      activate(key, { persist: false });
+      requestAnimationFrame(() => target.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+
+    let savedTab = "";
+    try { savedTab = localStorage.getItem("dealcockpit-active-workspace-tab") || ""; } catch { /* Use the default tab. */ }
+    const initialHashTarget = document.getElementById(location.hash.slice(1));
+    const initialSection = initialHashTarget?.closest("section");
+    const initialTab = sectionTabs.get(initialSection?.id) || (panels.has(savedTab) ? savedTab : "screening");
+    activate(initialTab || "screening", { persist: false });
+    window.addEventListener("hashchange", activateFromHash);
+    $("#launch-engine").addEventListener("click", (event) => {
+      event.preventDefault();
+      activate("screening", { scroll: true });
+      history.replaceState(null, "", "#screening");
+    });
+    $(".workspace-hero .hero-buttons a[href='#screening']").addEventListener("click", (event) => {
+      event.preventDefault();
+      activate("screening", { scroll: true });
+      history.replaceState(null, "", "#screening");
+    });
+    return { activate };
+  }
+
   function init() {
     initShared();
     if (!$("#screening")) return;
+    const workspace = initWorkspaceTabs();
+    $("#assistant-launcher").addEventListener("click", () => {
+      workspace.activate("committee", { scroll: true });
+      requestAnimationFrame(() => {
+        $("#assistant-chat").scrollIntoView({ behavior: "smooth", block: "start" });
+        $("#chat-input").focus({ preventScroll: true });
+      });
+    });
     const startingDeal = workspaceState?.model || sample;
     setFormData(startingDeal);
     if (Array.isArray(workspaceState?.icRatings) && workspaceState.icRatings.length === icRatings.length && workspaceState.icRatings.every((rating) => Number.isInteger(rating) && rating >= 1 && rating <= 5)) {
