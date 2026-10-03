@@ -28,6 +28,7 @@ jobs:
         shell: pwsh
         run: |
           $requiredFiles = @(
+            ".nojekyll",
             "index.html",
             "features.html",
             "engines.html",
@@ -66,6 +67,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path _site | Out-Null
           $siteFiles = @(
+            ".nojekyll",
             "index.html",
             "features.html",
             "engines.html",
