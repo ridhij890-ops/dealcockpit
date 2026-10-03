@@ -3,6 +3,8 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const siteBasePath = location.pathname.startsWith("/dealcockpit/") ? "/dealcockpit/" : "/";
+  const apiUrl = (endpoint) => `${siteBasePath}${endpoint.replace(/^\/+/, "")}`;
   const currencySymbols = { USD: "$", INR: "₹", EUR: "€", GBP: "£" };
   const displayRates = { USD: 1, INR: 83, EUR: 0.92, GBP: 0.79 };
   const categoryOffsets = {
@@ -26,6 +28,11 @@
     valuation: 24, ltv: 6, rounds: 2, burn: 0.42, revenue: 10,
     funding: 3, experience: 18, margin: 12
   };
+  const samplePresets = {
+    enterprise: { ...sample, name: "Northstar AI", stage: "Series A" },
+    energy: { ...sample, name: "Verdant Grid", category: "Clean Energy & EV", investor: "Angel", valuation: 12, ltv: 4.1, rounds: 1, burn: 0.3, revenue: 4.2, funding: 2, experience: 14, margin: 8, stage: "Seed" },
+    ecommerce: { ...sample, name: "QuickCart", category: "E-commerce & Q-Commerce", investor: "Early-Stage VC", valuation: 32, ltv: 2.4, rounds: 2, burn: 1.15, revenue: 18, funding: 9, experience: 8, margin: -6, stage: "Series A" }
+  };
   const samplePortfolio = [
     { ...sample, stage: "Diligence" },
     { ...sample, name: "Verdant Grid", category: "Clean Energy & EV", investor: "Angel", valuation: 12, ltv: 4.1, rounds: 1, burn: 0.3, revenue: 4.2, funding: 2, experience: 14, margin: 8, stage: "Screening" },
@@ -33,8 +40,9 @@
     { ...sample, name: "CarePath", category: "Healthtech", investor: "Early-Stage VC", valuation: 9, ltv: 5.2, rounds: 0, burn: 0.22, revenue: 2.7, funding: 1.5, experience: 9, margin: 15, stage: "IC ready" }
   ];
   const inputIds = ["valuation", "ltv-cac", "rounds", "burn", "revenue", "funding", "experience", "margin"];
+  const persistedControlIds = ["burn-slider", "revenue-slider", "seed-weight", "seriesa-weight", "followon-weight", "macro-failure", "exit-value", "option-pool", "safe-investment", "safe-cap", "safe-discount", "safe-round"];
   const inputLimits = {
-    "valuation": [0, 10000], "ltv-cac": [0, 100], "rounds": [0, 30],
+    "valuation": [0.1, 10000], "ltv-cac": [0.1, 100], "rounds": [0, 30],
     "burn": [0, 1000], "revenue": [0, 10000], "funding": [0, 10000],
     "experience": [0, 80], "margin": [-100, 100]
   };
@@ -62,6 +70,32 @@
   let activeDealId = null;
   let pendingDataset = null;
   let uploadGeneration = 0;
+  let attributionMode = "probability";
+  let currentPreset = "enterprise";
+  let mobileGrowthShock = 0;
+  let workspaceState = null;
+  let stateSaveTimer = null;
+
+  function validateModelInputs(inputs) {
+    const checks = [
+      ["valuation", 0.1, 10000],
+      ["ltv", 0.1, 100],
+      ["rounds", 0, 30],
+      ["burn", 0, 1000],
+      ["revenue", 0, 10000],
+      ["funding", 0, 10000],
+      ["experience", 0, 80],
+      ["margin", -100, 100]
+    ];
+    for (const [key, minimum, maximum] of checks) {
+      if (!Number.isFinite(inputs[key]) || inputs[key] < minimum || inputs[key] > maximum) {
+        throw new RangeError(`${key} must be a finite number from ${minimum} to ${maximum}.`);
+      }
+    }
+    if (!Number.isInteger(inputs.rounds)) throw new RangeError("Funding rounds must be a whole number.");
+    if (!Object.prototype.hasOwnProperty.call(categoryOffsets, inputs.category)) throw new RangeError("Choose a supported startup category.");
+    if (!Object.prototype.hasOwnProperty.call(investorOffsets, inputs.investor)) throw new RangeError("Choose a supported investor type.");
+  }
 
   function toast(message) {
     const target = $("#toast");
@@ -87,18 +121,91 @@
     return `${converted < 0 ? "−" : ""}${symbol}${amount}`;
   }
 
+  function saveWorkspaceState() {
+    if (importedDataset) return;
+    clearTimeout(stateSaveTimer);
+    stateSaveTimer = setTimeout(() => {
+      const model = currentModel?.inputs;
+      const state = {
+        version: 1,
+        currency: $("#currency")?.value || "USD",
+        preset: currentPreset,
+        activeDealId,
+        model: model ? {
+          name: $("#startup-name")?.textContent || sample.name,
+          category: model.category,
+          investor: model.investor,
+          valuation: model.valuation,
+          ltv: model.ltv,
+          rounds: model.rounds,
+          burn: model.burn,
+          revenue: model.revenue,
+          funding: model.funding,
+          experience: model.experience,
+          margin: model.margin
+        } : workspaceState?.model || null,
+        scenario: $("#burn-slider") ? {
+          burn: Number($("#burn-slider").value),
+          revenue: Number($("#revenue-slider").value)
+        } : workspaceState?.scenario || null,
+        controls: $("#screening") ? Object.fromEntries(persistedControlIds.map((id) => [id, $(`#${id}`).value])) : workspaceState?.controls || {},
+        safeType,
+        icRatings: [...icRatings]
+      };
+      try {
+        localStorage.setItem("dealcockpit-workspace-v1", JSON.stringify(state));
+        workspaceState = state;
+      } catch {
+        toast("Browser storage is unavailable; this evaluation will last only for this page view.");
+      }
+    }, 120);
+  }
+
+  function restoreWorkspaceState() {
+    try {
+      const state = JSON.parse(localStorage.getItem("dealcockpit-workspace-v1") || "null");
+      if (!state || state.version !== 1) return null;
+      if (["USD", "INR", "EUR", "GBP"].includes(state.currency)) $("#currency").value = state.currency;
+      if (state.model) {
+        const values = [state.model.valuation, state.model.ltv, state.model.rounds, state.model.burn, state.model.revenue, state.model.funding, state.model.experience, state.model.margin];
+        if (values.every(Number.isFinite) && categoryOffsets[state.model.category] && investorOffsets[state.model.investor]) {
+          const model = { ...sample, ...state.model };
+          try { validateModelInputs(model); state.model = model; } catch { state.model = null; }
+        } else state.model = null;
+      }
+      if (state.controls && typeof state.controls === "object") {
+        Object.entries(state.controls).forEach(([id, value]) => {
+          const field = $(`#${id}`);
+          const number = Number(value);
+          if (!field || !Number.isFinite(number) || number < Number(field.min) || number > Number(field.max)) return;
+          state.controls[id] = String(value);
+        });
+      }
+      if (state.safeType === "pre" || state.safeType === "post") safeType = state.safeType;
+      if (Array.isArray(state.icRatings) && state.icRatings.length === icRatings.length && state.icRatings.every((rating) => Number.isInteger(rating) && rating >= 1 && rating <= 5)) {
+        icRatings.splice(0, icRatings.length, ...state.icRatings);
+      }
+      workspaceState = state;
+      return state;
+    } catch {
+      return null;
+    }
+  }
+
   function readInputs() {
     const values = {};
     for (const id of inputIds) {
       const field = $(`#${id}`);
       const value = field.value.trim() === "" ? NaN : Number(field.value);
       const [min, max] = inputLimits[id];
-      if (!Number.isFinite(value) || value < min || value > max) {
+      const wholeNumberRequired = id === "rounds";
+      if (!Number.isFinite(value) || value < min || value > max || (wholeNumberRequired && !Number.isInteger(value))) {
         field.setAttribute("aria-invalid", "true");
-        $("#validation-message").textContent = `${field.labels[0].textContent} must be a number from ${min} to ${max}.`;
+        $("#validation-message").textContent = `${field.labels[0].textContent} must be ${wholeNumberRequired ? "a whole number" : "a number"} from ${min} to ${max}.`;
         field.focus();
         return null;
       }
+
       field.removeAttribute("aria-invalid");
       values[id] = value;
     }
@@ -117,7 +224,14 @@
     };
   }
 
+  function markCustomPreset() {
+    if (importedDataset) return;
+    currentPreset = "custom";
+    $$("[data-preset]").forEach((button) => button.setAttribute("aria-pressed", "false"));
+  }
+
   function calculate(inputs) {
+    validateModelInputs(inputs);
     const category = categoryOffsets[inputs.category] || [0, 0];
     const investor = investorOffsets[inputs.investor] || [0, 0];
     const contributions = [
@@ -138,12 +252,27 @@
       0.0746 * inputs.rounds - 0.5420 * inputs.burn + 0.0303 * inputs.revenue -
       0.1191 * inputs.funding + 0.0456 * inputs.experience + 0.0021 * inputs.margin +
       category[1] + investor[1];
-    return { probability, roi, logit, contributions, inputs };
+    const roiContributions = [
+      ["Valuation", 0.0237 * inputs.valuation],
+      ["LTV / CAC", 0.2918 * inputs.ltv],
+      ["Funding rounds", -0.0746 * inputs.rounds],
+      ["Monthly burn", -0.5420 * inputs.burn],
+      ["Annual revenue", 0.0303 * inputs.revenue],
+      ["Funding raised", -0.1191 * inputs.funding],
+      ["Founder experience", 0.0456 * inputs.experience],
+      ["Profit margin", 0.0021 * inputs.margin],
+      ["Category", category[1]],
+      ["Investor type", investor[1]]
+    ];
+    return { probability, roi, logit, contributions, roiContributions, inputs };
   }
 
   function drawContributions(model) {
-    const rows = model.contributions;
-    const baseline = -1.3654;
+    const probabilityMode = attributionMode === "probability";
+    const rows = probabilityMode ? model.contributions : model.roiContributions;
+    const baseline = probabilityMode ? -1.3654 : 1.9166;
+    const metricName = probabilityMode ? "success log-odds" : "illustrative ROI";
+    const endValue = probabilityMode ? model.logit : model.roi;
     const steps = [];
     let running = baseline;
     rows.forEach(([name, value], index) => {
@@ -174,10 +303,15 @@
       </div>`;
     }).join("");
     const probability = Math.round(model.probability * 100);
-    $("#contribution-chart").innerHTML = `<div class="waterfall-summary"><span>Starting logit<b>${baseline.toFixed(3)} intercept</b></span><span>Ending logit<b>${running.toFixed(3)} · ${probability}% modeled probability</b></span></div>
+    $("#contribution-chart").innerHTML = `<div class="attribution-tabs" role="group" aria-label="Model contribution view"><button type="button" data-attribution="probability" aria-pressed="${probabilityMode}">Success probability</button><button type="button" data-attribution="roi" aria-pressed="${!probabilityMode}">Projected ROI</button></div>
+      <div class="waterfall-summary"><span>Starting ${probabilityMode ? "logit" : "ROI"} intercept<b>${baseline.toFixed(3)}</b></span><span>Ending ${probabilityMode ? "logit" : "ROI"}<b>${endValue.toFixed(3)}${probabilityMode ? ` · ${probability}% illustrative probability` : "×"}</b></span></div>
       <div class="waterfall-axis" aria-hidden="true"><span>NEGATIVE CONTRIBUTION</span><i style="--zero:${zero}%"></i><span>POSITIVE CONTRIBUTION</span></div>
       ${rowsHtml}
-      <p class="micro-note">Each step is a supplied equation coefficient contribution to log-odds, not a causal effect or SHAP value. The logistic transform produces the final illustrative probability.</p>`;
+      <p class="micro-note">Each step is an exact supplied-equation coefficient contribution to ${metricName}. This is an equation-based explanation, not SHAP, a causal effect, or an independently validated model explanation.</p>`;
+    $$("[data-attribution]", $("#contribution-chart")).forEach((button) => button.addEventListener("click", () => {
+      attributionMode = button.dataset.attribution;
+      drawContributions(model);
+    }));
   }
 
   function getRiskFlags(inputs) {
@@ -185,7 +319,7 @@
     const profile = inputs.profile || {};
     if (inputs.ltv < 3) flags.push(["LTV / CAC below 3×", "high"]);
     else flags.push(["Healthy unit economics", "ok"]);
-    if (inputs.burn > Math.max(inputs.revenue / 12, 0.35)) flags.push(["Burn exceeds revenue run-rate", ""]);
+    if (inputs.burn > Math.max(inputs.revenue / 12, 0.35)) flags.push(["Burn exceeds revenue run-rate", "high"]);
     if (inputs.rounds >= 4) flags.push(["Multiple prior rounds", ""]);
     if (inputs.margin < 0) flags.push(["Negative profit margin", "high"]);
     if (inputs.funding > inputs.revenue * 3 && inputs.revenue > 0) flags.push(["Capital efficiency to monitor", ""]);
@@ -207,7 +341,21 @@
     $("#probability-gauge").setAttribute("aria-label", `Success probability ${percent} percent`);
     $("#gauge-value").style.strokeDashoffset = `${229 * (1 - model.probability)}`;
     $("#projected-roi").innerHTML = `${model.roi.toFixed(1)}<span>×</span>`;
-    $("#confidence-band").textContent = `${Math.max(0, percent - 10)}–${Math.min(100, percent + 10)}%`;
+    const bandLow = Math.max(0, percent - 10);
+    const bandHigh = Math.min(100, percent + 10);
+    $("#confidence-band").textContent = `${percent}% point estimate · ${bandLow}–${bandHigh}%`;
+    $("#confidence-band").setAttribute("aria-label", `${percent} percent point estimate; illustrative heuristic band ${bandLow} to ${bandHigh} percent, not a statistical confidence interval`);
+    const confidenceRange = $(".confidence-line i");
+    if (confidenceRange) {
+      confidenceRange.style.left = `${bandLow}%`;
+      confidenceRange.style.right = `${100 - bandHigh}%`;
+    }
+    const roiStatus = $("#roi-status");
+    if (roiStatus) {
+      const highRisk = getRiskFlags(model.inputs).some(([, level]) => level === "high");
+      roiStatus.textContent = highRisk ? "RISK REVIEW" : model.roi >= 2 ? "UPSIDE SIGNAL" : "CAUTION";
+      roiStatus.className = `pill ${highRisk || model.roi < 1 ? "pill-risk" : model.roi >= 2 ? "pill-positive" : "pill-neutral"}`;
+    }
     $("#score-label").textContent = percent >= 65 ? "PROMISING" : percent >= 40 ? "WATCH" : "HIGH RISK";
     $("#score-label").className = `pill ${percent >= 65 ? "pill-positive" : percent >= 40 ? "pill-neutral" : "pill-risk"}`;
     const risks = getRiskFlags(model.inputs);
@@ -219,6 +367,7 @@
     renderBenchmarks();
     renderSensitivity();
     updateCounterproposal();
+    saveWorkspaceState();
   }
 
   function recalculate() {
@@ -251,6 +400,11 @@
     $("#category").value = categoryOffsets[data.category] ? data.category : "Agritech";
     $("#investor").value = investorOffsets[data.investor] ? data.investor : "Angel";
     renderImportedProfile(data);
+    const restoredPreset = !importedDataset && workspaceState?.model?.name === data.name ? workspaceState.preset : null;
+    currentPreset = restoredPreset === "custom"
+      ? "custom"
+      : Object.entries(samplePresets).find(([, preset]) => preset.name === data.name)?.[0] || "custom";
+    $$("[data-preset]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.preset === currentPreset)));
     const map = {
       valuation: data.valuation, "ltv-cac": data.ltv, rounds: data.rounds, burn: data.burn,
       revenue: data.revenue, funding: data.funding, experience: data.experience, margin: data.margin
@@ -284,6 +438,7 @@
       if (importedDataset) {
         $("#waterfall-panel-note").textContent = "The spreadsheet does not include legal preference terms or a cap table. This view uses a clearly labeled proxy: one 1× non-participating preference for total funding raised and ownership estimated as funding ÷ valuation. Edit the stack to model a different assumption.";
       }
+      saveWorkspaceState();
     }
   }
 
@@ -367,6 +522,7 @@
     deltaNode.className = delta >= 0 ? "positive-text" : "negative-text";
     const scaled = Math.max(4, Math.min(96, scenarioPercent));
     $("#whatif-spark").style.background = `linear-gradient(155deg, transparent ${100 - scaled}%, var(--cyan) ${100 - scaled + 1}%, var(--cyan) ${100 - scaled + 5}%, transparent ${100 - scaled + 6}%)`;
+    saveWorkspaceState();
   }
 
   function renderAllocation(resetImportedStageMix = false) {
@@ -427,12 +583,13 @@
   }
 
   const pipelineStages = ["New", "Screening", "Diligence", "IC ready"];
-  let deals = [
+  const demoDeals = [
     { id: "northstar", name: "Northstar AI", sector: "Enterprise SaaS · Series A", score: 82, amount: "$24M", stage: 2, model: { ...sample } },
     { id: "verdant", name: "Verdant Grid", sector: "Clean Energy & EV · Seed", score: 76, amount: "$12M", stage: 1, model: { ...sample, name: "Verdant Grid", category: "Clean Energy & EV", valuation: 12, burn: .3, revenue: 4.2, ltv: 4.1, funding: 2, experience: 14 } },
     { id: "finloop", name: "Finloop", sector: "Fintech · Series A", score: 64, amount: "$18M", stage: 0, model: { ...sample, name: "Finloop", category: "Fintech", valuation: 18, burn: .62, revenue: 7.5, ltv: 3.4, funding: 5, experience: 11 } },
     { id: "carepath", name: "CarePath", sector: "Healthtech · Seed", score: 71, amount: "$9M", stage: 3, model: { ...sample, name: "CarePath", category: "Healthtech", valuation: 9, burn: .22, revenue: 2.7, ltv: 5.2, funding: 1.5, experience: 9 } }
   ];
+  let deals = demoDeals.map((deal) => ({ ...deal, model: { ...deal.model } }));
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
   }
@@ -487,18 +644,28 @@
     }));
     const minRoi = Math.min(...scenarios.map(({ model }) => model.roi));
     const maxRoi = Math.max(...scenarios.map(({ model }) => model.roi));
-    host.innerHTML = `<div class="heatmap-corner">REVENUE<br>GROWTH ↓ / BURN →</div>${burnShocks.map((shock) => `<div class="heatmap-axis">${shock > 0 ? "+" : ""}${shock}% burn</div>`).join("")}` +
-      growthShocks.map((growth) => `<div class="heatmap-axis heatmap-row-label">${growth > 0 ? "+" : ""}${growth}% growth</div>` + burnShocks.map((burnChange) => {
+    const growthSelect = $("#sensitivity-growth");
+    if (growthSelect) {
+      if (![...growthSelect.options].some((option) => Number(option.value) === mobileGrowthShock)) mobileGrowthShock = 0;
+      growthSelect.value = String(mobileGrowthShock);
+    }
+    host.innerHTML = `<div class="heatmap-corner">REVENUE<br>GROWTH ↓ / BURN →</div>${burnShocks.map((shock) => `<div class="heatmap-axis heatmap-column-label">${shock > 0 ? "+" : ""}${shock}% burn</div>`).join("")}` +
+      growthShocks.map((growth) => `<div class="heatmap-axis heatmap-row-label" data-growth-row="${growth}">${growth > 0 ? "+" : ""}${growth}% growth</div>` + burnShocks.map((burnChange) => {
         const scenario = scenarios.find((item) => item.growth === growth && item.burnChange === burnChange);
         const ratio = maxRoi === minRoi ? .5 : Math.max(0, Math.min(1, (scenario.model.roi - minRoi) / (maxRoi - minRoi)));
         const alpha = .12 + ratio * .5;
         const background = scenario.model.roi >= 0 ? `rgba(79,224,160,${alpha})` : `rgba(255,119,126,${alpha})`;
-        return `<button type="button" role="gridcell" class="heat-cell" data-growth="${growth}" data-burn-shock="${burnChange}" style="--heat:${background}" aria-label="${growth}% revenue growth shock, ${burnChange}% burn shock: ${scenario.model.roi.toFixed(2)} times ROI, ${Math.round(scenario.model.probability * 100)} percent modeled survival, ${Number.isFinite(scenario.runway) ? scenario.runway.toFixed(0) : "unlimited"} months runway" title="${growth}% revenue / ${burnChange}% burn · ROI ${scenario.model.roi.toFixed(2)}× · survival ${Math.round(scenario.model.probability * 100)}% · runway ${Number.isFinite(scenario.runway) ? scenario.runway.toFixed(0) : "∞"} mo">${scenario.model.roi.toFixed(1)}×</button>`;
+        return `<button type="button" role="gridcell" class="heat-cell" data-growth="${growth}" data-growth-row="${growth}" data-burn-shock="${burnChange}" style="--heat:${background}" aria-label="${growth}% revenue growth shock, ${burnChange}% burn shock: ${scenario.model.roi.toFixed(2)} times ROI, ${Math.round(scenario.model.probability * 100)} percent illustrative success probability, ${Number.isFinite(scenario.runway) ? scenario.runway.toFixed(0) : "unlimited"} months runway" title="${growth}% revenue / ${burnChange}% burn · ROI ${scenario.model.roi.toFixed(2)}× · illustrative probability ${Math.round(scenario.model.probability * 100)}% · runway ${Number.isFinite(scenario.runway) ? scenario.runway.toFixed(0) : "∞"} mo">${scenario.model.roi.toFixed(1)}×</button>`;
       }).join("")).join("");
+    const compactView = window.matchMedia("(max-width: 767px)").matches;
+    $$(".heatmap-row-label, .heat-cell", host).forEach((item) => {
+      item.hidden = compactView && Number(item.dataset.growthRow) !== mobileGrowthShock;
+    });
+    $$(".heatmap-column-label, .heatmap-corner", host).forEach((item) => { item.hidden = compactView; });
     $$(".heat-cell", host).forEach((cell) => cell.addEventListener("click", () => {
       const scenario = scenarios.find((item) => item.growth === Number(cell.dataset.growth) && item.burnChange === Number(cell.dataset.burnShock));
       $$(".heat-cell", host).forEach((item) => item.classList.toggle("selected", item === cell));
-      $("#sensitivity-detail").textContent = `${scenario.growth > 0 ? "+" : ""}${scenario.growth}% revenue-growth shock and ${scenario.burnChange > 0 ? "+" : ""}${scenario.burnChange}% burn → illustrative ROI ${scenario.model.roi.toFixed(2)}× · modeled survival odds ${Math.round(scenario.model.probability * 100)}% · estimated runway ${Number.isFinite(scenario.runway) ? scenario.runway.toFixed(1) + " months" : "not burn-limited"}.`;
+      $("#sensitivity-detail").textContent = `${scenario.growth > 0 ? "+" : ""}${scenario.growth}% revenue-growth shock and ${scenario.burnChange > 0 ? "+" : ""}${scenario.burnChange}% burn → illustrative ROI ${scenario.model.roi.toFixed(2)}× · illustrative success probability ${Math.round(scenario.model.probability * 100)}% · estimated runway ${Number.isFinite(scenario.runway) ? scenario.runway.toFixed(1) + " months" : "not burn-limited"}.`;
     }));
   }
 
@@ -516,6 +683,7 @@
     const stageMultiples = [2.4, 2.1, 1.8];
     const expectedReturn = 100 * normalized.reduce((sum, weight, index) => sum + weight / 100 * (stageMultiples[index] * (1 - failure) + .15 * failure), 0);
     $("#expected-fund-return").textContent = `${displayMoney(expectedReturn / 100)}× fund multiple`;
+    saveWorkspaceState();
   }
 
   function renderPreferenceStack() {
@@ -598,6 +766,7 @@
     $("#waterfall-bar").innerHTML = distribution.map((value, index) => `<span class="${index >= rounds.length ? "other-segment" : "pref-segment"}" style="width:${Math.max(0, value / exit * 100)}%;background:${colors[index % colors.length]}" title="${escapeHtml(index < rounds.length ? rounds[index].name : index === rounds.length ? "Founders/common" : "Option pool")} ${displayMoney(value)}M"></span>`).join("");
     $("#waterfall-bar").setAttribute("aria-label", `VC proceeds ${totalInvestor.toFixed(1)} million, founders and common ${commonPayout.toFixed(1)} million, option pool ${poolPayout.toFixed(1)} million`);
     $("#waterfall-payouts").innerHTML = rounds.map((round) => `<div><span>${escapeHtml(round.name)}${round.converted ? " · converted" : " · preference"}</span><b>${displayMoney(round.payout)}M</b></div>`).join("") + `<div><span>Option pool</span><b>${displayMoney(poolPayout)}M</b></div>`;
+    saveWorkspaceState();
   }
 
   const icPillars = ["Team quality", "Market size", "Moat / defensibility", "Unit economics", "Valuation", "Financial health"];
@@ -621,6 +790,7 @@
       icRatings[Number(slider.dataset.pillar)] = Number(slider.value);
       $("output", slider.parentElement).textContent = `${slider.value}/5`;
       drawIcRadar();
+      saveWorkspaceState();
     }));
     drawIcRadar();
   }
@@ -694,6 +864,7 @@
     $("#counterproposal-result").innerHTML = `<div><span>Current illustrative success odds</span><b>${Math.round(currentModel.probability * 100)}%</b></div><div><span>With adjusted terms (model inputs only)</span><b>${Math.round(adjustment.probability * 100)}%</b></div><div><span>Adjusted illustrative ROI</span><b>${adjustment.roi.toFixed(2)}×</b></div>`;
     const tranche = Math.min(99, Math.max(1, Number($("#term-tranche-one").value) || 60));
     termSummary = `# Illustrative Counter-Proposal — ${$("#startup-name").textContent}\n\nNot legal advice. Draft for discussion only; all adjusted model outputs are illustrative and do not guarantee company outcomes.\n\n- Proposed pre-money valuation: $${targetValuation.toFixed(1)}M\n- Target monthly burn: $${targetBurn.toFixed(2)}M\n- Current illustrative modeled success odds: ${(currentModel.probability * 100).toFixed(1)}%\n- Adjusted illustrative modeled success odds: ${(adjustment.probability * 100).toFixed(1)}%\n- Adjusted illustrative ROI output: ${adjustment.roi.toFixed(2)}×\n${$("#term-tranches").checked ? `- Tranche 1: ${tranche}% of investment at close; remaining ${100 - tranche}% released after milestone: ${$("#term-milestone").value.trim() || "mutually agreed milestones"}.\n` : "- Funding released in a single tranche, subject to negotiated definitive documents.\n"}\n- Board seat: ${$("#term-board-seat")?.checked ? "Investor board seat requested." : "No investor board seat requested in this draft."}\n\nThis summary is a non-binding demo draft.`;
+    saveWorkspaceState();
   }
 
   function saveBlob(content, type, filename) {
@@ -763,6 +934,7 @@
     const ownership = safeType === "post" ? investment / cap : investment / (effectivePrice + investment);
     const safeValuation = effectivePrice;
     $("#safe-result").innerHTML = `<span>Estimated ownership<b>${(ownership * 100).toFixed(2)}%</b></span><span>Conversion price basis<b>${safeValuation.toFixed(2)}M cap-equivalent</b></span><span>Applied term<b>${effectivePrice === cap ? "Valuation cap" : "Discount"}</b></span>`;
+    saveWorkspaceState();
   }
 
   const marketPeers = {
@@ -919,11 +1091,29 @@
   function closeCommand() { $("#command-overlay").hidden = true; $("#open-shortcuts").focus(); }
 
   function openSampleDeal() {
+    loadSamplePreset("enterprise");
+  }
+
+  function loadSamplePreset(name) {
+    const preset = samplePresets[name];
+    if (!preset) return toast("Choose one of the available demo presets.");
     if ($("#screening")) {
       pendingDataset = null;
       if ($("#run-analysis")) $("#run-analysis").disabled = true;
-      setFormData(sample);
-      toast("Northstar AI sample loaded.");
+      importedDataset = false;
+      importedDatasetName = "";
+      activeDealId = null;
+      workspaceState = { ...workspaceState, preset: name };
+      deals = demoDeals.map((deal) => ({ ...deal, model: { ...deal.model } }));
+      selectedDeals.clear();
+      deals.slice(0, 4).forEach((deal) => selectedDeals.add(deal.id));
+      setFormData(preset);
+      renderAllocation(true);
+      renderPipeline();
+      renderBenchmarks();
+      renderCorrelation();
+      if (workspaceState?.model) saveWorkspaceState();
+      toast(`${preset.name} demo preset loaded.`);
       return;
     }
     location.href = "engines.html#screening";
@@ -952,7 +1142,9 @@
     const date = new Date().toLocaleDateString();
     const risks = getRiskFlags(inputs).map((item) => `- ${item[0]}`).join("\n");
     const topDrivers = contributions.slice().sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 5).map(([name, value]) => `- ${name}: ${value > 0 ? "+" : ""}${value.toFixed(3)} logit contribution`).join("\n");
-    const content = `# Illustrative Deal Evaluation Memo\n\n**Company:** ${$("#startup-name").textContent}\n**Date:** ${date}\n**Category:** ${inputs.category} · **Investor type:** ${inputs.investor}\n\n> Demo model output for discussion only. Not investment advice, a recommendation, validated backtesting, or a forecast. Confidence band and benchmarks are illustrative.\n\n## Screening snapshot\n- Success probability: ${(probability * 100).toFixed(1)}% (illustrative band ${(Math.max(0, probability * 100 - 10)).toFixed(0)}–${Math.min(100, probability * 100 + 10).toFixed(0)}%)\n- Projected ROI: ${roi.toFixed(2)}× (illustrative model output)\n- Valuation: $${inputs.valuation}M; LTV/CAC: ${inputs.ltv}; funding rounds: ${inputs.rounds}\n- Monthly burn: $${inputs.burn}M; annual revenue: $${inputs.revenue}M; funding raised: $${inputs.funding}M\n- Founder experience: ${inputs.experience} years; profit margin: ${inputs.margin}%\n\n## Primary model drivers\n${topDrivers}\n\n## Risk flags\n${risks}\n\n## Model note\nUses the supplied illustrative logistic success equation and linear ROI equation with category and investor offsets. This browser demo does not train models or calculate SHAP values.\n`;
+    const bandLow = Math.max(0, Math.round(probability * 100) - 10);
+    const bandHigh = Math.min(100, Math.round(probability * 100) + 10);
+    const content = `# Illustrative Deal Evaluation Memo\n\n**Company:** ${$("#startup-name").textContent}\n**Date:** ${date}\n**Category:** ${inputs.category} · **Investor type:** ${inputs.investor}\n\n> Quantitative pre-screen and diligence triage only. Supports consistent review; it does not eliminate bias or replace Investment Committee judgment. Not investment advice, a recommendation, or a forecast.\n\n## Screening snapshot\n- Success probability: ${(probability * 100).toFixed(1)}% point estimate · illustrative range ${bandLow}–${bandHigh}% (heuristic ±10 percentage points; not a statistical confidence interval)\n- Projected ROI: ${roi.toFixed(2)}× (illustrative equation output; not expected performance)\n- Valuation: $${inputs.valuation}M; LTV/CAC: ${inputs.ltv}; funding rounds: ${inputs.rounds}\n- Monthly burn: $${inputs.burn}M; annual revenue: $${inputs.revenue}M; funding raised: $${inputs.funding}M\n- Founder experience: ${inputs.experience} years; profit margin: ${inputs.margin}%\n\n## Equation contribution drivers\n${topDrivers}\n\n## Risk flags\n${risks}\n\n## Investment Committee diligence — qualitative judgment required\n- Validate TAM, market structure, and the bottom-up path to scale.\n- Test product defensibility, switching costs, and durable competitive advantage.\n- Conduct founder references and assess execution, integrity, and team gaps.\n- Debate power-law upside potential, dilution, portfolio fit, and downside paths.\n\n## Model and validation note\nUses the supplied illustrative logistic success equation and linear ROI equation. No historical-deal backtest, calibration study, or validated confidence interval is available; benchmarks are illustrative. Equation contributions are not SHAP, causal effects, or a substitute for qualitative diligence.`;
     const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -962,7 +1154,41 @@
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    toast("Evaluation memo downloaded.");
+    toast("Evaluation memo downloaded as Markdown.");
+  }
+
+  function printIcMemo() {
+    if (!$("#screening")) {
+      location.href = "engines.html#screening";
+      return;
+    }
+    if (!currentModel) return toast("Load valid deal inputs before preparing an IC memo.");
+    const { inputs, probability, roi, contributions } = currentModel;
+    const risks = getRiskFlags(inputs);
+    const voteCounts = `${votes.strong} strong · ${votes.conditional} conditional · ${votes.pass} pass`;
+    const consensusIndex = $("#ic-consensus-index")?.textContent || "—";
+    const drivers = contributions.slice().sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6);
+    const low = Math.max(0, Math.round(probability * 100) - 10);
+    const high = Math.min(100, Math.round(probability * 100) + 10);
+    const escape = (value) => escapeHtml(value);
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return toast("Allow pop-ups for this site to print or save the IC memo as PDF.");
+    const riskMarkup = risks.map(([text, level]) => `<li class="${level === "high" ? "risk" : ""}">${escape(text)}</li>`).join("");
+    const driverMarkup = drivers.map(([name, value]) => `<li><span>${escape(name)}</span><b class="${value >= 0 ? "positive" : "negative"}">${value > 0 ? "+" : ""}${value.toFixed(3)}</b></li>`).join("");
+    const pillarMarkup = icPillars.map((pillar, index) => `<span>${escape(pillar)} <b>${icRatings[index]}/5</b></span>`).join("");
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escape($("#startup-name").textContent)} — IC evaluation memo</title><style>
+      @page{size:A4;margin:12mm}*{box-sizing:border-box}body{font:10px/1.4 Arial,sans-serif;color:#172637;margin:0}h1{font-size:21px;margin:0 0 4px}h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#315266;margin:12px 0 5px}.brand{font-size:8px;letter-spacing:.18em;color:#0b8391;font-weight:bold}.meta{color:#526879;margin-bottom:9px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:7px}.metric{border:1px solid #d8e2e8;border-radius:6px;padding:9px}.metric strong{display:block;font-size:24px;color:#0a7180}.metric.roi strong{color:#177b57}.metric small{font-size:8px;color:#526879}.notice{border-left:3px solid #087f8b;background:#edf8f8;padding:7px 9px;margin:8px 0;font-size:8px}.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}.list{margin:0;padding-left:15px}.list li{margin:2px 0}.risk{color:#b52e3d}.drivers{list-style:none;padding:0}.drivers li{display:flex;justify-content:space-between;border-bottom:1px solid #e5ebef;padding:3px 0}.positive{color:#16865d}.negative{color:#c94450}.pillars{display:flex;flex-wrap:wrap;gap:5px}.pillars span{border:1px solid #d8e2e8;border-radius:12px;padding:4px 7px;font-size:8px}.footer{border-top:1px solid #d8e2e8;margin-top:10px;padding-top:6px;color:#526879;font-size:8px}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style></head><body>
+      <div class="brand">DEALCOCKPIT · QUANTITATIVE PRE-SCREEN</div><h1>${escape($("#startup-name").textContent)} — IC Evaluation Memo</h1><div class="meta">${escape(inputs.category)} · ${escape(inputs.investor)} · ${escape(new Date().toLocaleDateString())}</div>
+      <div class="notice"><b>Decision support, not a verdict.</b> Quantitative risk triage complements—not replaces—qualitative IC judgment, TAM diligence, moat/defensibility, founder references, and power-law upside assessment. Illustrative demo only; not investment advice.</div>
+      <div class="metrics"><div class="metric"><strong>${Math.round(probability * 100)}%</strong><small>Illustrative success-probability point estimate · heuristic display band ${low}–${high}% (±10 pts; not a statistical CI)</small></div><div class="metric roi"><strong>${roi.toFixed(2)}×</strong><small>Illustrative projected ROI equation output; not a forecast</small></div></div>
+      <div class="cols"><section><h2>Operating inputs</h2><ul class="list"><li>Valuation $${inputs.valuation}M · Revenue $${inputs.revenue}M · Burn $${inputs.burn}M/mo</li><li>LTV/CAC ${inputs.ltv}× · Funding $${inputs.funding}M · ${inputs.rounds} rounds</li><li>Founder experience ${inputs.experience} years · Profit margin ${inputs.margin}%</li></ul><h2>Model risk flags</h2><ul class="list">${riskMarkup}</ul></section><section><h2>Equation-based contributions</h2><ul class="drivers">${driverMarkup}</ul><small>Exact equation contributions; not SHAP, causality, or validation.</small></section></div>
+      <h2>Qualitative IC scorecard · consensus ${escape(consensusIndex)} · ${escape(voteCounts)} local demo votes</h2><div class="pillars">${pillarMarkup}</div>
+      <h2>Required diligence before any decision</h2><ul class="list"><li>Verify bottom-up TAM and the route to a venture-scale market.</li><li>Pressure-test product moat, differentiation, and competitive durability.</li><li>Complete independent founder references and execution diligence.</li><li>Debate power-law upside, dilution, portfolio fit, and downside scenarios.</li></ul>
+      <div class="footer">No historical deal backtest, calibration study, or validated confidence interval is available. Benchmarks and scorecard heuristics are illustrative. Verify source data and use independent investment judgment.</div>
+      <script>window.addEventListener("load",()=>setTimeout(()=>{window.focus();window.print()},150))</script></body></html>`);
+    printWindow.document.close();
+    toast("IC memo opened. Choose Save as PDF in the print dialog.");
   }
 
   function parseCsv(text) {
@@ -1068,7 +1294,7 @@
           profile[key] = cells[column];
           return;
         }
-        const value = parseNumericCell(cells[column]);
+        const value = parseNumericCell(cells[column], key === "experience");
         if (key === "mrrMillion" || key === "tamMillion") {
           profile[key] = value;
           if (/(?:cr|crore)s?$/.test(header)) {
@@ -1108,13 +1334,13 @@
       if (Object.entries(formMap).some(([key, id]) => {
         const value = record[key];
         const [minimum, maximum] = inputLimits[id];
-        return !Number.isFinite(value) || value < minimum || value > maximum;
+        return !Number.isFinite(value) || value < minimum || value > maximum || (key === "rounds" && !Number.isInteger(value));
       })) {
         const invalid = Object.entries(formMap).find(([key, id]) => {
           const [minimum, maximum] = inputLimits[id];
-          return !Number.isFinite(record[key]) || record[key] < minimum || record[key] > maximum;
+          return !Number.isFinite(record[key]) || record[key] < minimum || record[key] > maximum || (key === "rounds" && !Number.isInteger(record[key]));
         });
-        throw new Error(`CSV row ${line}: ${invalid[0]} must be a number from ${inputLimits[invalid[1]][0]} to ${inputLimits[invalid[1]][1]}.`);
+        throw new Error(`CSV row ${line}: ${invalid[0]} must be ${invalid[0] === "rounds" ? "a whole number" : "a number"} from ${inputLimits[invalid[1]][0]} to ${inputLimits[invalid[1]][1]}.`);
       }
       if (record.category) {
         const sector = record.category.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -1144,16 +1370,16 @@
     return records;
   }
 
-  function parseNumericCell(value) {
+  function parseNumericCell(value, allowYears = false) {
     let normalized = String(value).trim().replace(/[₹$€£\s]/g, "").replace(/%$/, "");
     const accountingNegative = /^\([\d,.]+\)$/.test(normalized);
     normalized = normalized.replace(/^\(|\)$/g, "");
-    const suffix = normalized.match(/([kmb])$/i)?.[1]?.toLowerCase();
+    if (allowYears) normalized = normalized.replace(/(?:\+?(?:years?|yrs?)(?:ofexperience)?\.?|\+)+$/i, "");
+    const match = normalized.match(/^([+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+))([kmb])?$/i);
+    if (!match) return Number.NaN;
+    const suffix = match[2]?.toLowerCase();
     const multiplier = suffix === "k" ? 0.001 : suffix === "b" ? 1000 : 1;
-    if (suffix) normalized = normalized.slice(0, -1);
-    const number = normalized.match(/^[+-]?(?:\d[\d,]*(?:\.\d*)?|\.\d+)/)?.[0];
-    if (!number) return Number.NaN;
-    return Number(number.replace(/,/g, "")) * multiplier * (accountingNegative ? -1 : 1);
+    return Number(match[1].replace(/,/g, "")) * multiplier * (accountingNegative ? -1 : 1);
   }
 
   function roundsForStage(stage) {
@@ -1598,7 +1824,7 @@
     input.disabled = true;
     const typing = addChatMessage("Thinking…", "typing-msg");
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch(apiUrl("api/chat"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: chatMode, messages: history.slice(-12), context: chatMode === "analyst" ? getDealContext() : null })
@@ -1644,7 +1870,7 @@
     if (!status) return;
     const label = $("span", status);
     try {
-      const response = await fetch("/api/health", { headers: { Accept: "application/json" } });
+      const response = await fetch(apiUrl("api/health"), { headers: { Accept: "application/json" } });
       const payload = await response.json();
       if (!response.ok) throw new Error("AI status unavailable");
       status.classList.toggle("offline", !payload.configured);
@@ -1676,7 +1902,7 @@
   }
 
   async function setGeminiApiKey(key) {
-    const response = await fetch("/api/gemini-key", {
+    const response = await fetch(apiUrl("api/gemini-key"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ key })
@@ -1687,6 +1913,7 @@
   }
 
   function initShared() {
+    workspaceState = restoreWorkspaceState();
     $("#theme-toggle").addEventListener("click", () => {
       const light = document.documentElement.dataset.theme !== "light";
       document.documentElement.dataset.theme = light ? "light" : "dark";
@@ -1699,6 +1926,7 @@
     } catch { /* Storage may be unavailable in private browsing. */ }
     $("#currency").addEventListener("change", () => {
       if ($("#screening")) { renderAllocation(); updateWaterfall(); }
+      saveWorkspaceState();
       toast("Using illustrative fixed display conversion; not live FX.");
     });
     $("#open-shortcuts").addEventListener("click", openCommand);
@@ -1728,7 +1956,32 @@
   function init() {
     initShared();
     if (!$("#screening")) return;
-    setFormData(sample);
+    const startingDeal = workspaceState?.model || sample;
+    setFormData(startingDeal);
+    if (Array.isArray(workspaceState?.icRatings) && workspaceState.icRatings.length === icRatings.length && workspaceState.icRatings.every((rating) => Number.isInteger(rating) && rating >= 1 && rating <= 5)) {
+      icRatings.splice(0, icRatings.length, ...workspaceState.icRatings);
+    }
+    if (workspaceState?.scenario) {
+      const { burn, revenue } = workspaceState.scenario;
+      if (Number.isFinite(burn)) $("#burn-slider").value = Math.min(2.5, Math.max(0.05, burn));
+      if (Number.isFinite(revenue)) $("#revenue-slider").value = Math.min(30, Math.max(0, revenue));
+      updateWhatIf();
+    }
+    if (workspaceState?.controls) {
+      Object.entries(workspaceState.controls).forEach(([id, value]) => {
+        const field = $(`#${id}`);
+        if (field) field.value = value;
+      });
+      $$("[data-safe]").forEach((button) => {
+        const active = button.dataset.safe === safeType;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+    }
+    if (workspaceState?.activeDealId && deals.some((deal) => deal.id === workspaceState.activeDealId)) {
+      activeDealId = workspaceState.activeDealId;
+      selectedDeals.add(activeDealId);
+    }
     try {
       const pendingDeal = sessionStorage.getItem("dealcockpit-pending-deal");
       if (pendingDeal) {
@@ -1744,8 +1997,9 @@
     renderAllocation();
     renderPipeline();
     renderPreferenceStack();
-    updateWaterfall();
+    updateStageAllocation();
     updateSafe();
+    updateWaterfall();
     updateVotes();
     renderIcRadar();
     renderBenchmarks();
@@ -1754,16 +2008,22 @@
     renderSensitivity();
     updateCounterproposal();
     wireDashboardAssistantLinks();
+    const sensitivityResize = () => {
+      clearTimeout(sensitivityResize.timer);
+      sensitivityResize.timer = setTimeout(renderSensitivity, 100);
+    };
+    window.addEventListener("resize", sensitivityResize, { passive: true });
 
     inputIds.forEach((id) => $(`#${id}`).addEventListener("input", () => {
+      markCustomPreset();
       if (id === "burn") $("#burn-slider").value = Math.min(2.5, Math.max(.05, Number($(`#${id}`).value) || .05));
       if (id === "revenue") $("#revenue-slider").value = Math.min(30, Math.max(0, Number($(`#${id}`).value) || 0));
       recalculate();
       renderBenchmarks();
       updateWaterfall();
     }));
-    $("#category").addEventListener("change", recalculate);
-    $("#investor").addEventListener("change", recalculate);
+    $("#category").addEventListener("change", () => { markCustomPreset(); recalculate(); });
+    $("#investor").addEventListener("change", () => { markCustomPreset(); recalculate(); });
     $("#burn-slider").addEventListener("input", updateWhatIf);
     $("#revenue-slider").addEventListener("input", updateWhatIf);
     $("#reset-scenario").addEventListener("click", () => {
@@ -1788,8 +2048,15 @@
     }));
     $("#market-category").addEventListener("change", updateMarket);
     $("#download-memo").addEventListener("click", downloadMemo);
+    $("#print-ic-memo").addEventListener("click", printIcMemo);
+    $$("[data-print-ic-memo]").forEach((button) => button.addEventListener("click", printIcMemo));
     $("#sample-data").addEventListener("click", openSampleDeal);
+    $$("[data-preset]").forEach((button) => button.addEventListener("click", () => loadSamplePreset(button.dataset.preset)));
     $("#sample-portfolio").addEventListener("click", loadSamplePortfolio);
+    $("#sensitivity-growth").addEventListener("change", (event) => {
+      mobileGrowthShock = Number(event.target.value);
+      renderSensitivity();
+    });
     $("#browse-csv").addEventListener("click", () => $("#csv-file").click());
     $("#run-analysis").addEventListener("click", runPendingAnalysis);
     $("#csv-file").addEventListener("change", (event) => {

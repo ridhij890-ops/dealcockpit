@@ -24,6 +24,40 @@ jobs:
       - name: Check out the site
         uses: actions/checkout@v4
 
+      - name: Validate static pages and relative assets
+        shell: pwsh
+        run: |
+          $requiredFiles = @(
+            "index.html",
+            "features.html",
+            "engines.html",
+            "about.html",
+            "app.js",
+            "xlsx.full.min.js",
+            "LICENSE-SheetJS.txt",
+            "styles.css"
+          )
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Required deployment asset is missing: $file"
+            }
+          }
+          foreach ($page in @("index.html", "features.html", "engines.html", "about.html")) {
+            $contents = Get-Content -LiteralPath $page -Raw
+            if ($contents -notmatch 'href="styles\.css"' -or $contents -notmatch 'src="app\.js"') {
+              throw "$page must reference its local stylesheet and application script."
+            }
+            if ($contents -match '(?:href|src)="\/(?!\/)') {
+              throw "$page contains a root-relative static path that would break under the /dealcockpit/ Pages base path."
+            }
+          }
+          $engines = Get-Content -LiteralPath "engines.html" -Raw
+          foreach ($feature in @("run-analysis", "sensitivity-growth", "print-ic-memo", "data-preset")) {
+            if ($engines -notmatch [regex]::Escape($feature)) {
+              throw "Core Engines page is missing required workflow UI: $feature"
+            }
+          }
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 

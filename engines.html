@@ -64,24 +64,35 @@
         </div>
       </div>
       <div id="uploaded-files" class="upload-files" aria-live="polite"></div>
+      <div class="sample-presets" aria-label="Instant startup presets">
+        <span class="panel-kicker">TRY A DEMO PRESET</span>
+        <button class="button button-outline" type="button" data-preset="enterprise" aria-pressed="true">Enterprise SaaS <small>Early-stage</small></button>
+        <button class="button button-outline" type="button" data-preset="energy" aria-pressed="false">Clean energy <small>Capital-intensive</small></button>
+        <button class="button button-outline" type="button" data-preset="ecommerce" aria-pressed="false">E-commerce <small>Hyper-growth</small></button>
+      </div>
+    </section>
+
+    <section class="shell methodology-banner" aria-label="Investment methodology">
+      <div><span class="eyebrow">QUANTITATIVE CO-PILOT · HUMAN DECISION-MAKER</span><h2>Standardize the pre-screen. Keep judgment in the room.</h2></div>
+      <p>Use the illustrative equations to surface unit-economic and burn risks, structure triage, and challenge assumptions. They complement—not replace—qualitative IC work: bottom-up TAM, product defensibility, founder references, and power-law upside. This demo does not eliminate cognitive bias, train an ML model, or provide a decision recommendation.</p>
     </section>
 
     <section id="screening" class="section shell">
-      <div class="section-heading"><div><div class="eyebrow">01 / DEAL SCREENING</div><h2>Start with the <span>signal.</span></h2></div><button id="download-memo" class="button button-outline" type="button">↓ Download evaluation memo</button></div>
+      <div class="section-heading"><div><div class="eyebrow">01 / DEAL SCREENING</div><h2>Start with the <span>signal.</span></h2></div><div class="memo-actions"><button id="download-memo" class="button button-outline" type="button">↓ Download Markdown memo</button><button id="print-ic-memo" class="button button-primary" type="button">▤ Print / save IC memo PDF</button></div></div>
       <div class="screen-layout">
         <article class="panel score-panel">
           <div class="panel-head"><div><span class="panel-kicker">CURRENT OPPORTUNITY</span><h3 id="startup-name">Northstar AI</h3></div><span id="score-label" class="pill pill-positive">PROMISING</span></div>
           <div class="score-main">
             <div class="gauge" id="probability-gauge" role="img" aria-label="Success probability 68 percent"><svg viewBox="0 0 180 110" aria-hidden="true"><path class="gauge-track" d="M17 97a73 73 0 0 1 146 0"/><path id="gauge-value" class="gauge-value" d="M17 97a73 73 0 0 1 146 0"/></svg><div class="gauge-number"><strong id="success-prob">68%</strong><small>success probability</small></div></div>
-            <div class="return-stat"><span>PROJECTED ROI</span><strong id="projected-roi">4.2<span>×</span></strong><small>illustrative return multiple</small></div>
+            <div class="return-stat"><span>PROJECTED ROI</span><strong id="projected-roi">4.2<span>×</span></strong><span id="roi-status" class="pill pill-positive">UPSIDE SIGNAL</span><small>illustrative return multiple</small></div>
           </div>
-          <div class="confidence-row"><span>Confidence band <b id="confidence-band">58–78%</b></span><span class="confidence-line"><i></i></span><small>Illustrative range</small></div>
+          <div class="confidence-row"><span>Model output <b id="confidence-band">68% · 58–78%</b></span><span class="confidence-line"><i></i></span><small>Heuristic ±10 pts; not a statistical CI</small></div>
           <div class="risk-block"><div class="subhead"><span>Risk flags</span><span id="risk-count">2 identified</span></div><div id="risk-flags" class="risk-tags"></div></div>
           <div class="score-foot"><span><i class="tiny-positive"></i> Based on 8 inputs</span><span class="mono" id="model-disclaimer">DEMO MODEL · V1.0</span></div>
         </article>
         <article class="panel contribution-panel">
           <div class="panel-head"><div><span class="panel-kicker">EQUATION-BASED EXPLAINABILITY</span><h3>Why did the model move?</h3></div><span class="info-dot" title="A cumulative waterfall of supplied equation coefficients—not SHAP or causal effects">i</span></div>
-          <p class="panel-description">Trace each supplied coefficient through the model’s logit to its illustrative probability. This transparent equation-based waterfall is not SHAP.</p>
+          <p class="panel-description">Switch between exact supplied-equation contributions for modeled success log-odds and ROI. Transparent arithmetic—not SHAP, causal attribution, or independently validated XAI.</p>
           <div id="contribution-chart" class="contribution-chart" aria-label="Feature contribution chart"></div>
         </article>
       </div>
@@ -89,8 +100,8 @@
         <div class="input-bar-title"><span class="panel-kicker">DEAL INPUTS</span><small>Update assumptions to recalculate</small></div>
         <label>Category<select id="category"><option>Agritech</option><option>Clean Energy &amp; EV</option><option>E-commerce &amp; Q-Commerce</option><option>Edtech</option><option>Enterprise SaaS</option><option>Fintech</option><option>Healthtech</option><option>Logistics &amp; Supply Chain</option></select></label>
         <label>Investor type<select id="investor"><option>Angel</option><option>Early-Stage VC</option><option>Growth VC</option><option>Corporate VC</option></select></label>
-        <label>Valuation ($M)<input id="valuation" type="number" min="0" max="10000" step="0.1" value="24"></label>
-        <label>LTV / CAC<input id="ltv-cac" type="number" min="0" max="100" step="0.1" value="6"></label>
+        <label>Valuation ($M)<input id="valuation" type="number" min="0.1" max="10000" step="0.1" value="24"></label>
+        <label>LTV / CAC<input id="ltv-cac" type="number" min="0.1" max="100" step="0.1" value="6"></label>
         <label>Funding rounds<input id="rounds" type="number" min="0" max="30" step="1" value="2"></label>
         <label>Monthly burn ($M)<input id="burn" type="number" min="0" max="1000" step="0.1" value="0.42"></label>
         <label>Annual revenue ($M)<input id="revenue" type="number" min="0" max="10000" step="0.1" value="10"></label>
@@ -141,6 +152,7 @@
       <div class="section-heading"><div><div class="eyebrow">03 / TWO-WAY STRESS TEST</div><h2>Stress-test two assumptions <span>at once.</span></h2></div><p>Illustrative ROI across revenue-growth and burn shocks. Select a cell to inspect its demo survival odds and runway.</p></div>
       <article class="panel sensitivity-panel">
         <div class="panel-head"><div><span class="panel-kicker">5 × 5 RETURN SENSITIVITY</span><h3>Revenue growth vs. monthly burn</h3></div><span class="pill pill-neutral">ILLUSTRATIVE · NOT FORECAST</span></div>
+        <label class="mobile-sensitivity-control" for="sensitivity-growth">Revenue-growth scenario<select id="sensitivity-growth"><option value="-40">−40% revenue growth</option><option value="-20">−20% revenue growth</option><option value="0" selected>Base revenue growth</option><option value="20">+20% revenue growth</option><option value="40">+40% revenue growth</option></select></label>
         <div id="sensitivity-heatmap" class="sensitivity-heatmap" role="grid" aria-label="ROI sensitivity matrix"></div>
         <div id="sensitivity-detail" class="sensitivity-detail" aria-live="polite">Choose a stress-grid cell to inspect the scenario.</div>
         <div class="heatmap-legend"><span>Lower modeled ROI</span><i></i><span>Higher modeled ROI</span></div>
@@ -227,7 +239,7 @@
     </section>
 
     <section id="ic" class="section shell">
-      <div class="section-heading"><div><div class="eyebrow">10 / INVESTMENT COMMITTEE</div><h2>Make room for <span>conviction.</span></h2></div><p>Capture a point-in-time pulse. Votes stay in this browser session.</p></div>
+      <div class="section-heading"><div><div class="eyebrow">10 / INVESTMENT COMMITTEE</div><h2>Make room for <span>conviction.</span></h2></div><div class="memo-actions"><p>Capture a point-in-time pulse. Votes stay in this browser session.</p><button class="button button-outline" type="button" data-print-ic-memo>Print / save IC memo PDF</button></div></div>
       <div class="ic-layout">
         <article class="panel vote-panel"><div class="panel-head"><div><span class="panel-kicker">LOCAL DEMO SCORECARD · NOT LIVE COLLABORATION</span><h3>Northstar AI · Series A</h3></div><span class="pill pill-neutral" id="consensus-label">AWAITING VOTES</span></div>
           <div class="radar-layout"><svg id="ic-radar" class="ic-radar" viewBox="0 0 240 220" role="img" aria-label="Investment committee six-pillar scorecard"></svg><div id="ic-pillar-inputs" class="ic-pillar-inputs"></div></div>
