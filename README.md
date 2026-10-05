@@ -14,7 +14,7 @@ python -m http.server 8000
 
 Then open <http://localhost:8000>. This static-only option does not provide the AI API; the help desk can answer a few built-in product FAQs, while general AI answers require the local proxy below.
 
-**Enable open-ended AI with Google Gemini:** on the public HTTPS site, open Core engines, expand **Configure Gemini API key**, paste your own Google AI Studio key, and choose **Use for this session**. The key is held only in the current page's memory and sent directly to Google over HTTPS when you chat; it is not sent to DealCockpit or written to browser storage, and a page refresh clears it. Restrict the key in Google AI Studio to the Generative Language API and the HTTP referrer `https://ridhij890-ops.github.io/*`. On a trusted local setup, you can instead use the included proxy; it keeps the key in server memory and clears it when stopped.
+**Enable open-ended AI with Google Gemini:** on the public HTTPS site, open Core engines, expand **Configure Gemini API key**, paste your own Google AI Studio key, and choose **Use for this session**. The key is held only in the current page's memory and sent directly to Google over HTTPS when you chat; it is not sent to DealCockpit or written to browser storage, and a page refresh clears it. The page starts with Gemini Flash and checks the models enabled for your key to retry with an available Flash model if Google returns a model-not-found error. Restrict the key in Google AI Studio to the Generative Language API and the HTTP referrer `https://ridhij890-ops.github.io/*`. On a trusted local setup, you can instead use the included proxy; it keeps the key in server memory and clears it when stopped.
 
 ```powershell
 .\server.ps1

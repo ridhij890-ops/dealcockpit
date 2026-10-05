@@ -1932,17 +1932,40 @@
         role: message.role === "assistant" ? "model" : "user",
         parts: [{ text: message.content.slice(0, 2000) }]
       }));
-    const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-    const response = await fetch(endpoint, {
+    const apiBase = "https://generativelanguage.googleapis.com/v1beta";
+    const requestBody = {
+      systemInstruction: { parts: [{ text: prompt }] },
+      contents,
+      generationConfig: { temperature: 0.4, maxOutputTokens: 900 }
+    };
+    const requestModel = (model) => fetch(`${apiBase}/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": browserGeminiApiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: prompt }] },
-        contents,
-        generationConfig: { temperature: 0.4, maxOutputTokens: 900 }
-      })
+      body: JSON.stringify(requestBody)
     });
-    const payload = await response.json().catch(() => ({}));
+    let response = await requestModel("gemini-2.5-flash");
+    let payload = await response.json().catch(() => ({}));
+    if (response.status === 404) {
+      const modelsResponse = await fetch(`${apiBase}/models`, {
+        headers: { "x-goog-api-key": browserGeminiApiKey }
+      });
+      const modelsPayload = await modelsResponse.json().catch(() => ({}));
+      if (modelsResponse.ok && Array.isArray(modelsPayload.models)) {
+        const availableModels = new Set(modelsPayload.models
+          .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
+          .map((model) => String(model.name || "").replace(/^models\//, "")));
+        const fallbackModel = [
+          "gemini-3.8-flash",
+          "gemini-2.5-flash",
+          "gemini-2.5-flash-lite",
+          "gemini-2.0-flash"
+        ].find((model) => model !== "gemini-2.5-flash" && availableModels.has(model));
+        if (fallbackModel) {
+          response = await requestModel(fallbackModel);
+          payload = await response.json().catch(() => ({}));
+        }
+      }
+    }
     if (!response.ok) {
       const providerError = payload.error || {};
       const detail = providerError.message;
@@ -1960,7 +1983,9 @@
       if (response.status === 401 || response.status === 403) {
         throw new Error(detail || "Google denied this request. Check the API key, its restrictions, and Generative Language API access.");
       }
-      if (response.status === 404) throw new Error("The Gemini model or API endpoint was not found. Check that the key has Generative Language API access.");
+      if (response.status === 404) {
+        throw new Error("Google could not find a text-generation model available to this key. Check that the Generative Language API is enabled and that this key has access to a Gemini Flash model.");
+      }
       throw new Error(detail || `Gemini returned an error (${response.status}).`);
     }
     const answer = payload.candidates?.[0]?.content?.parts
