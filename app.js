@@ -1944,11 +1944,23 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const detail = payload.error?.message;
-      if (response.status === 400 || response.status === 401 || response.status === 403) {
-        throw new Error(detail || "Google rejected this API key or request. Check the key and Generative Language API access.");
+      const providerError = payload.error || {};
+      const detail = providerError.message;
+      const reason = providerError.details?.find((item) => item.reason)?.reason || providerError.status;
+      if (reason === "API_KEY_INVALID" || /api key not valid/i.test(detail || "")) {
+        throw new Error("Google rejected this API key. Create or copy an active key from Google AI Studio, then check that its API restriction allows the Generative Language API and its website restriction allows https://ridhij890-ops.github.io/*. If the key was just created, wait briefly and try again.");
+      }
+      if (reason === "API_KEY_HTTP_REFERRER_BLOCKED" || /referer|referrer/i.test(detail || "")) {
+        throw new Error("Google blocked this website in the API key restrictions. In Google Cloud credentials, allow the HTTP referrer https://ridhij890-ops.github.io/* and permit the Generative Language API.");
+      }
+      if (reason === "SERVICE_DISABLED" || /generative language api.*(disabled|not been used)/i.test(detail || "")) {
+        throw new Error("The Generative Language API is not enabled for this Google project. Enable it in Google Cloud, then try again.");
       }
       if (response.status === 429) throw new Error("Gemini rate limit or quota reached. Check your Google AI Studio quota and try again.");
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(detail || "Google denied this request. Check the API key, its restrictions, and Generative Language API access.");
+      }
+      if (response.status === 404) throw new Error("The Gemini model or API endpoint was not found. Check that the key has Generative Language API access.");
       throw new Error(detail || `Gemini returned an error (${response.status}).`);
     }
     const answer = payload.candidates?.[0]?.content?.parts
