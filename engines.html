@@ -272,14 +272,14 @@
           <div class="assistant-toolbar"><div class="assistant-tabs" role="tablist" aria-label="Assistant mode"><button type="button" class="assistant-tab active" role="tab" aria-selected="true" data-chat-mode="analyst">Deal analyst</button><button type="button" class="assistant-tab" role="tab" aria-selected="false" data-chat-mode="helpdesk">Help desk</button></div><button type="button" class="clear-chat" id="clear-chat">Clear chat</button></div>
           <details class="ai-key-settings">
             <summary>Configure Gemini API key</summary>
-            <p>Enter your Google AI Studio key to enable open-ended answers in both chat modes. It stays in this server’s memory and is cleared when the server stops.</p>
+            <p>Enter your own Google AI Studio key to enable open-ended answers in both chat modes. On this public HTTPS site it stays in this page’s memory and is sent directly to Google; on localhost it is held by the local server.</p>
             <form id="gemini-key-form" class="gemini-key-form">
               <label class="sr-only" for="gemini-api-key">Gemini API key</label>
               <input id="gemini-api-key" type="password" autocomplete="new-password" placeholder="Paste Gemini API key" maxlength="512">
-              <button id="save-gemini-key" class="button button-primary" type="submit">Save for this session</button>
+              <button id="save-gemini-key" class="button button-primary" type="submit">Use for this session</button>
             </form>
             <div class="gemini-key-actions"><button id="toggle-gemini-key" class="text-button" type="button" aria-pressed="false">Show key</button><button id="clear-gemini-key" class="text-button" type="button">Clear saved key</button></div>
-            <small id="gemini-key-status" class="gemini-key-status" aria-live="polite">The key is sent to Google when you ask a question. Do not use a key you cannot safely expose to this local browser session.</small>
+            <small id="gemini-key-status" class="gemini-key-status" aria-live="polite">Public link: your key is sent directly to Google over HTTPS, is not sent to DealCockpit, and is cleared when this page is refreshed. Restrict it to the Generative Language API and HTTP referrer https://ridhij890-ops.github.io/*.</small>
           </details>
           <p class="assistant-description" id="assistant-description">Ask general questions or explore this deal. Deal context is included when available.</p>
           <div id="chat-messages" class="chat-messages" aria-live="polite" aria-relevant="additions text"><div class="chat-msg assistant-msg">Hi! Ask me about this deal, venture investing, financial modeling, or anything else you’re working through. I’ll explain assumptions and call out uncertainty.</div></div>
