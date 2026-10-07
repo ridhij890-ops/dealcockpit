@@ -85,6 +85,7 @@
         <button id="workspace-tab-capital" type="button" role="tab" aria-controls="workspace-panel-capital" aria-selected="false" tabindex="-1" data-workspace-tab="capital"><span>03</span> Capital tools</button>
         <button id="workspace-tab-pipeline" type="button" role="tab" aria-controls="workspace-panel-pipeline" aria-selected="false" tabindex="-1" data-workspace-tab="pipeline"><span>04</span> Deal flow</button>
         <button id="workspace-tab-committee" type="button" role="tab" aria-controls="workspace-panel-committee" aria-selected="false" tabindex="-1" data-workspace-tab="committee"><span>05</span> IC &amp; analyst</button>
+        <button id="workspace-tab-tracking" type="button" role="tab" aria-controls="workspace-panel-tracking" aria-selected="false" tabindex="-1" data-workspace-tab="tracking"><span>06</span> Portfolio tracking</button>
       </nav>
       <div id="workspace-panels" class="workspace-panels shell"></div>
     </div>
@@ -288,6 +289,68 @@
           <p class="assistant-privacy">Questions are sent to the configured AI provider when connected. Don’t share sensitive personal or confidential information.</p>
         </article>
       </div>
+    </section>
+
+    <section id="portfolio-tracking" class="section shell">
+      <div class="section-heading">
+        <div><div class="eyebrow">11 / POST-INVESTMENT INTELLIGENCE</div><h2>Track the <span>trajectory.</span></h2></div>
+        <div class="memo-actions"><p>Enter a monthly or quarterly update; data stays in this browser.</p><button id="export-lp-summary" class="button button-primary" type="button">▤ Export LP quarterly summary PDF</button></div>
+      </div>
+      <div class="tracking-toolbar panel">
+        <div><span class="panel-kicker">PORTFOLIO COMPANY</span><b id="tracking-company">Northstar AI</b><small id="tracking-updated">Manual demo data · not live sync</small></div>
+        <label class="compact-select">Reporting cadence<select id="tracking-period"><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option></select></label>
+        <div class="tracking-toolbar-actions"><button id="sync-tracking-deal" class="button button-outline" type="button">↻ Sync from current deal</button><span id="tracking-validation" class="tracking-validation" role="status" aria-live="polite"></span></div>
+      </div>
+      <div class="tracking-metrics" aria-label="Current portfolio operating metrics">
+        <article class="panel tracking-metric"><span>REVENUE GROWTH</span><strong id="tracking-growth">—</strong><small id="tracking-growth-context">Actual vs deck projection</small><div class="tracking-meter"><i id="tracking-growth-meter"></i></div></article>
+        <article class="panel tracking-metric"><span>MONTHLY BURN</span><strong id="tracking-burn">—</strong><small id="tracking-burn-context">Actual vs deck projection</small><div class="tracking-meter"><i id="tracking-burn-meter"></i></div></article>
+        <article class="panel tracking-metric"><span>LTV / CAC</span><strong id="tracking-ltv">—</strong><small id="tracking-ltv-context">Actual vs deck projection</small><div class="tracking-meter"><i id="tracking-ltv-meter"></i></div></article>
+        <article class="panel tracking-metric"><span>CASH RUNWAY</span><strong id="tracking-runway">—</strong><small id="tracking-runway-context">Actual vs deck projection</small><div class="tracking-meter"><i id="tracking-runway-meter"></i></div></article>
+      </div>
+      <div class="tracking-overview-grid">
+        <article class="panel tracking-score-panel">
+          <div class="panel-head"><div><span class="panel-kicker">DYNAMIC RE-SCORE · ILLUSTRATIVE EQUATION</span><h3>Operating signal</h3></div><span class="pill pill-neutral" id="tracking-score-delta">— vs baseline</span></div>
+          <div class="tracking-score-content"><div class="tracking-score-ring" id="tracking-score-ring"><strong id="tracking-score">—</strong><small>success score</small></div><div><p id="tracking-score-summary">Update actual metrics to compare with the pitch-deck baseline.</p><small>Reuses the supplied demo equation; this is not a trained post-investment model or an investment recommendation.</small></div></div>
+        </article>
+        <article class="panel tracking-alert-panel">
+          <div class="panel-head"><div><span class="panel-kicker">THRESHOLD MONITOR</span><h3>Operating alerts</h3></div><span class="pill pill-neutral" id="tracking-alert-count">0 alerts</span></div>
+          <div id="tracking-alerts" class="tracking-alerts" aria-live="polite"></div>
+        </article>
+      </div>
+      <div class="tracking-overview-grid tracking-lower-grid">
+        <article class="panel tracking-milestone-panel">
+          <div class="panel-head"><div><span class="panel-kicker">VARIANCE &amp; MILESTONES</span><h3>Plan versus actual</h3></div><span class="pill pill-neutral" id="tracking-milestone-count">—</span></div>
+          <div id="tracking-milestones" class="tracking-milestones"></div>
+          <p class="micro-note">Variance is relative to the editable baseline below. Growth and margin should meet or exceed plan; burn should be at or below plan.</p>
+        </article>
+        <article class="panel tracking-fundraise-panel">
+          <div class="panel-head"><div><span class="panel-kicker">FUNDRAISING &amp; RESERVES</span><h3>Plan the next window</h3></div><span class="engine-icon" aria-hidden="true">↗</span></div>
+          <div class="tracking-countdown"><span id="tracking-countdown">—</span><small>Illustrative days until fundraising window opens</small></div>
+          <div class="tracking-reserve"><span>Estimated pro-rata reserve</span><strong id="tracking-reserve">$—</strong><small id="tracking-reserve-context">Based on ownership × next round × reserve coverage</small></div>
+        </article>
+      </div>
+      <details class="panel tracking-inputs">
+        <summary>Update actuals, pitch-deck baselines &amp; planning assumptions</summary>
+        <div class="tracking-input-grid">
+          <label>Current revenue ($M)<input id="tracking-revenue" type="number" min="0" max="10000" step="0.01" value="10"></label>
+          <label>Prior-period revenue ($M)<input id="tracking-prior-revenue" type="number" min="0" max="10000" step="0.01" value="8.5"></label>
+          <label>Deck revenue growth (%)<input id="tracking-baseline-growth" type="number" min="-100" max="1000" step="1" value="18"></label>
+          <label>Actual monthly burn ($M)<input id="tracking-actual-burn" type="number" min="0" max="1000" step="0.01" value="0.42"></label>
+          <label>Deck monthly burn ($M)<input id="tracking-baseline-burn" type="number" min="0" max="1000" step="0.01" value="0.4"></label>
+          <label>Actual LTV / CAC<input id="tracking-actual-ltv" type="number" min="0.1" max="100" step="0.1" value="6"></label>
+          <label>Deck LTV / CAC<input id="tracking-baseline-ltv" type="number" min="0.1" max="100" step="0.1" value="5"></label>
+          <label>Actual cash runway (months)<input id="tracking-actual-runway" type="number" min="0" max="120" step="0.5" value="9"></label>
+          <label>Deck cash runway (months)<input id="tracking-baseline-runway" type="number" min="0" max="120" step="0.5" value="12"></label>
+          <label>Actual profit margin (%)<input id="tracking-actual-margin" type="number" min="-100" max="100" step="1" value="12"></label>
+          <label>Deck profit margin (%)<input id="tracking-baseline-margin" type="number" min="-100" max="100" step="1" value="15"></label>
+          <label>Fundraising lead time (months)<input id="tracking-lead-time" type="number" min="0" max="36" step="0.5" value="6.5"></label>
+          <label>Current ownership (%)<input id="tracking-ownership" type="number" min="0" max="100" step="0.5" value="15"></label>
+          <label>Next round target ($M)<input id="tracking-next-round" type="number" min="0" max="10000" step="0.5" value="8"></label>
+          <label>Reserve coverage (×)<input id="tracking-reserve-coverage" type="number" min="0" max="10" step="0.1" value="1.5"></label>
+        </div>
+        <p class="micro-note">Manual demo inputs only. No accounting system or company data feed is connected. Currency conversion uses the site's fixed illustrative display rates.</p>
+      </details>
+      <p class="tracking-disclaimer">Illustrative portfolio monitoring only. Scores, alert thresholds, timing, pro-rata estimates, and baseline comparisons are planning aids—not validated forecasts, live monitoring, investment advice, or LP statements.</p>
     </section>
 
   </main>

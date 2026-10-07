@@ -82,6 +82,16 @@
   let mobileGrowthShock = 0;
   let workspaceState = null;
   let stateSaveTimer = null;
+  const trackingInputIds = [
+    "tracking-revenue", "tracking-prior-revenue", "tracking-baseline-growth",
+    "tracking-actual-burn", "tracking-baseline-burn", "tracking-actual-ltv",
+    "tracking-baseline-ltv", "tracking-actual-runway", "tracking-baseline-runway",
+    "tracking-actual-margin", "tracking-baseline-margin", "tracking-lead-time",
+    "tracking-ownership", "tracking-next-round", "tracking-reserve-coverage"
+  ];
+  const trackingStorageKey = "dealcockpit-portfolio-tracking-v1";
+  let portfolioTrackingReady = false;
+  let trackingLastUpdated = "";
 
   function validateModelInputs(inputs) {
     const checks = [
@@ -378,6 +388,217 @@
     return flags.length ? flags.slice(0, 4) : [["No threshold flags detected", "ok"]];
   }
 
+  function initializePortfolioTracking() {
+    if (!$("#portfolio-tracking")) return;
+    const inputs = currentModel?.inputs || sample;
+    const defaults = {
+      "tracking-revenue": inputs.revenue,
+      "tracking-prior-revenue": (inputs.revenue / 1.18).toFixed(2),
+      "tracking-baseline-growth": 18,
+      "tracking-actual-burn": inputs.burn,
+      "tracking-baseline-burn": inputs.burn,
+      "tracking-actual-ltv": inputs.ltv,
+      "tracking-baseline-ltv": inputs.ltv,
+      "tracking-actual-runway": 9,
+      "tracking-baseline-runway": 12,
+      "tracking-actual-margin": inputs.margin,
+      "tracking-baseline-margin": inputs.margin,
+      "tracking-lead-time": 6.5,
+      "tracking-ownership": 15,
+      "tracking-next-round": 8,
+      "tracking-reserve-coverage": 1.5
+    };
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(trackingStorageKey) || "null"); } catch { /* Start with current-deal demo values. */ }
+    trackingInputIds.forEach((id) => {
+      const field = $(`#${id}`);
+      const value = Number(saved?.[id]);
+      const validSavedValue = Number.isFinite(value) && value >= Number(field.min) && value <= Number(field.max);
+      field.value = validSavedValue ? String(value) : String(defaults[id]);
+    });
+    if (["Monthly", "Quarterly"].includes(saved?.period)) $("#tracking-period").value = saved.period;
+    trackingLastUpdated = typeof saved?.updatedAt === "string" ? saved.updatedAt : "";
+    portfolioTrackingReady = true;
+    renderPortfolioTracking();
+  }
+
+  function readTrackingInputs() {
+    const values = {};
+    let valid = true;
+    trackingInputIds.forEach((id) => {
+      const field = $(`#${id}`);
+      const value = Number(field.value);
+      const fieldValid = field.value.trim() !== "" && Number.isFinite(value) && field.checkValidity();
+      field.setAttribute("aria-invalid", String(!fieldValid));
+      if (!fieldValid) valid = false;
+      values[id] = value;
+    });
+    if (!valid) {
+      $("#tracking-validation").textContent = "Check highlighted values and their allowed ranges.";
+      return null;
+    }
+    $("#tracking-validation").textContent = "";
+    return values;
+  }
+
+  function saveTrackingInputs() {
+    const values = readTrackingInputs();
+    if (!values) return;
+    trackingLastUpdated = new Date().toISOString();
+    try {
+      localStorage.setItem(trackingStorageKey, JSON.stringify({
+        ...values,
+        period: $("#tracking-period").value,
+        updatedAt: trackingLastUpdated
+      }));
+    } catch {
+      $("#tracking-validation").textContent = "Browser storage unavailable; these edits last for this page view.";
+    }
+    renderPortfolioTracking();
+  }
+
+  function renderPortfolioTracking() {
+    if (!portfolioTrackingReady || !$("#portfolio-tracking")) return;
+    const values = readTrackingInputs();
+    if (!values || !currentModel) return;
+    $("#tracking-company").textContent = $("#startup-name").textContent || "Current portfolio company";
+    const number = (id) => values[id];
+    const actualRevenue = number("tracking-revenue");
+    const priorRevenue = number("tracking-prior-revenue");
+    const actualGrowth = priorRevenue > 0 ? (actualRevenue / priorRevenue - 1) * 100 : null;
+    const baselineGrowth = number("tracking-baseline-growth");
+    const projectedRevenue = priorRevenue * (1 + baselineGrowth / 100);
+    const actualBurn = number("tracking-actual-burn");
+    const baselineBurn = number("tracking-baseline-burn");
+    const actualLtv = number("tracking-actual-ltv");
+    const baselineLtv = number("tracking-baseline-ltv");
+    const actualRunway = number("tracking-actual-runway");
+    const baselineRunway = number("tracking-baseline-runway");
+    const actualMargin = number("tracking-actual-margin");
+    const baselineMargin = number("tracking-baseline-margin");
+    const currency = (value) => displayMoney(value, 2);
+    const pct = (value) => `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+    const variance = (actual, baseline) => baseline === 0 ? null : (actual - baseline) / Math.abs(baseline) * 100;
+    const metricRows = [
+      { key: "growth", actual: actualGrowth, baseline: baselineGrowth, label: "Revenue growth", format: (value) => `${value.toFixed(1)}%`, favorable: (value) => value >= 0 },
+      { key: "burn", actual: actualBurn, baseline: baselineBurn, label: "Monthly burn", format: (value) => `${currency(value)} / mo`, favorable: (value) => value <= 0 },
+      { key: "ltv", actual: actualLtv, baseline: baselineLtv, label: "LTV / CAC", format: (value) => `${value.toFixed(1)}×`, favorable: (value) => value >= 0 },
+      { key: "runway", actual: actualRunway, baseline: baselineRunway, label: "Cash runway", format: (value) => `${value.toFixed(1)} months`, favorable: (value) => value >= 0 }
+    ];
+    metricRows.forEach((metric) => {
+      const actualLabel = metric.actual === null ? "—" : metric.format(metric.actual);
+      const delta = metric.actual === null ? null : variance(metric.actual, metric.baseline);
+      const favorable = delta !== null && metric.favorable(delta);
+      $(`#tracking-${metric.key}`).textContent = actualLabel;
+      $(`#tracking-${metric.key}-context`).textContent = delta === null
+        ? `Deck projection ${metric.format(metric.baseline)} · prior revenue required`
+        : `Deck ${metric.format(metric.baseline)} · ${pct(delta)} variance`;
+      $(`#tracking-${metric.key}-context`).className = `tracking-variance ${delta === null ? "" : favorable ? "positive-text" : "negative-text"}`;
+      const meter = $(`#tracking-${metric.key}-meter`);
+      meter.style.width = `${Math.min(100, Math.max(4, 50 + (delta || 0) / 2))}%`;
+      meter.className = delta === null ? "" : favorable ? "favorable" : "unfavorable";
+    });
+
+    const actualInputs = {
+      ...currentModel.inputs, revenue: actualRevenue, burn: actualBurn, ltv: actualLtv, margin: actualMargin
+    };
+    const baselineInputs = {
+      ...currentModel.inputs, revenue: projectedRevenue, burn: baselineBurn, ltv: baselineLtv, margin: baselineMargin
+    };
+    const actualScore = Math.round(calculate(actualInputs).probability * 100);
+    const baselineScore = Math.round(calculate(baselineInputs).probability * 100);
+    const scoreDelta = actualScore - baselineScore;
+    $("#tracking-score").textContent = `${actualScore}%`;
+    $("#tracking-score-ring").style.setProperty("--tracking-score", `${actualScore}%`);
+    $("#tracking-score-delta").textContent = `${scoreDelta > 0 ? "+" : ""}${scoreDelta} pts vs baseline`;
+    $("#tracking-score-delta").className = `pill ${scoreDelta > 0 ? "pill-positive" : scoreDelta < 0 ? "pill-risk" : "pill-neutral"}`;
+    $("#tracking-score-summary").textContent = `${$("#tracking-company").textContent}: actual operating inputs score ${actualScore}% versus ${baselineScore}% using the supplied illustrative screening equation.`;
+
+    const alerts = [];
+    if (actualRunway < 6) alerts.push(["Critical", `Runway is below six months (${actualRunway.toFixed(1)} months).`]);
+    if (actualLtv < 3) alerts.push(["Critical", `LTV/CAC is below the 3.0× monitoring threshold (${actualLtv.toFixed(1)}×).`]);
+    if (baselineBurn > 0 && actualBurn > baselineBurn * 1.1) alerts.push(["Watch", `Monthly burn is ${pct(variance(actualBurn, baselineBurn))} above the pitch-deck baseline.`]);
+    if (actualMargin < baselineMargin - 5) alerts.push(["Watch", `Profit margin is more than 5 points below the deck baseline (${actualMargin.toFixed(1)}% vs ${baselineMargin.toFixed(1)}%).`]);
+    $("#tracking-alert-count").textContent = `${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"}`;
+    $("#tracking-alert-count").className = `pill ${alerts.some(([level]) => level === "Critical") ? "pill-risk" : alerts.length ? "pill-neutral" : "pill-positive"}`;
+    $("#tracking-alerts").innerHTML = alerts.length
+      ? alerts.map(([level, message]) => `<div class="tracking-alert ${level === "Critical" ? "critical" : ""}"><b>${level}</b><span>${escapeHtml(message)}</span></div>`).join("")
+      : `<div class="tracking-all-clear"><span>✓</span><div><b>No threshold alerts</b><small>Current actuals are within the demo monitoring thresholds.</small></div></div>`;
+
+    const milestoneRows = [
+      { name: "Revenue growth", actual: actualGrowth, baseline: baselineGrowth, format: (value) => `${value.toFixed(1)}%`, meets: (actual, baseline) => actual >= baseline },
+      { name: "Monthly burn", actual: actualBurn, baseline: baselineBurn, format: (value) => `${currency(value)} / mo`, meets: (actual, baseline) => actual <= baseline },
+      { name: "LTV / CAC", actual: actualLtv, baseline: baselineLtv, format: (value) => `${value.toFixed(1)}×`, meets: (actual, baseline) => actual >= Math.max(3, baseline) },
+      { name: "Profit margin", actual: actualMargin, baseline: baselineMargin, format: (value) => `${value.toFixed(1)}%`, meets: (actual, baseline) => actual >= baseline }
+    ];
+    const metCount = milestoneRows.filter((row) => row.actual !== null && row.meets(row.actual, row.baseline)).length;
+    $("#tracking-milestone-count").textContent = `${metCount} / ${milestoneRows.length} on plan`;
+    $("#tracking-milestones").innerHTML = milestoneRows.map((row) => {
+      const met = row.actual !== null && row.meets(row.actual, row.baseline);
+      return `<div class="tracking-milestone"><span class="${met ? "milestone-met" : "milestone-watch"}">${met ? "✓" : "!"}</span><div><b>${row.name}</b><small>Actual ${row.actual === null ? "—" : row.format(row.actual)} · baseline ${row.format(row.baseline)}</small></div><span class="tracking-status ${met ? "positive-text" : "negative-text"}">${met ? "ON PLAN" : "REVIEW"}</span></div>`;
+    }).join("");
+
+    const daysUntilWindow = Math.max(0, Math.round((actualRunway - number("tracking-lead-time")) * 30));
+    $("#tracking-countdown").textContent = daysUntilWindow === 0 ? "Open now" : `${daysUntilWindow} days`;
+    const reserve = number("tracking-next-round") * number("tracking-ownership") / 100 * number("tracking-reserve-coverage");
+    $("#tracking-reserve").textContent = currency(reserve);
+    $("#tracking-reserve-context").textContent = `${number("tracking-ownership").toFixed(1)}% ownership × ${currency(number("tracking-next-round"))} next round × ${number("tracking-reserve-coverage").toFixed(1)}× coverage`;
+    $("#tracking-updated").textContent = trackingLastUpdated
+      ? `Manual update · ${new Date(trackingLastUpdated).toLocaleString()}`
+      : "Manual demo data · not live sync";
+  }
+
+  function syncTrackingFromDeal() {
+    if (!currentModel) return;
+    const inputs = currentModel.inputs;
+    $("#tracking-revenue").value = inputs.revenue;
+    $("#tracking-prior-revenue").value = (inputs.revenue / (1 + Number($("#tracking-baseline-growth").value || 18) / 100)).toFixed(2);
+    $("#tracking-actual-burn").value = inputs.burn;
+    $("#tracking-actual-ltv").value = inputs.ltv;
+    $("#tracking-actual-margin").value = inputs.margin;
+    if (Number.isFinite(inputs.profile?.runwayMonths)) $("#tracking-actual-runway").value = inputs.profile.runwayMonths;
+    saveTrackingInputs();
+    toast("Current deal inputs synced into the editable portfolio actuals.");
+  }
+
+  function printPortfolioSummary() {
+    const values = readTrackingInputs();
+    if (!values || !currentModel) return toast("Enter valid tracking inputs before preparing the LP summary.");
+    renderPortfolioTracking();
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return toast("Allow pop-ups for this site to print or save the LP summary as PDF.");
+    const escape = (value) => escapeHtml(value);
+    const company = $("#tracking-company").textContent;
+    const revenueGrowth = values["tracking-prior-revenue"] > 0
+      ? `${((values["tracking-revenue"] / values["tracking-prior-revenue"] - 1) * 100).toFixed(1)}%`
+      : "Not available (prior-period revenue is zero)";
+    const metrics = [
+      ["Revenue growth", revenueGrowth, `${values["tracking-baseline-growth"].toFixed(1)}%`],
+      ["Monthly burn", `${displayMoney(values["tracking-actual-burn"], 2)} / mo`, `${displayMoney(values["tracking-baseline-burn"], 2)} / mo`],
+      ["LTV / CAC", `${values["tracking-actual-ltv"].toFixed(1)}×`, `${values["tracking-baseline-ltv"].toFixed(1)}×`],
+      ["Cash runway", `${values["tracking-actual-runway"].toFixed(1)} months`, `${values["tracking-baseline-runway"].toFixed(1)} months`],
+      ["Profit margin", `${values["tracking-actual-margin"].toFixed(1)}%`, `${values["tracking-baseline-margin"].toFixed(1)}%`]
+    ];
+    const rows = metrics.map(([name, actual, baseline]) => `<tr><th>${escape(name)}</th><td>${escape(actual)}</td><td>${escape(baseline)}</td></tr>`).join("");
+    const score = $("#tracking-score").textContent;
+    const countdown = $("#tracking-countdown").textContent;
+    const reserve = $("#tracking-reserve").textContent;
+    const alerts = $$(".tracking-alert").map((item) => `<li>${escape(item.textContent.trim())}</li>`).join("") || "<li>No threshold alerts at the time of this report.</li>";
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escape(company)} · LP quarterly summary</title><style>
+      @page{size:A4;margin:14mm}*{box-sizing:border-box}body{font:11px/1.5 Arial,sans-serif;color:#172637;margin:0}.brand{font-size:9px;font-weight:bold;letter-spacing:.16em;color:#087f8b}h1{font-size:23px;margin:9px 0 3px}h2{font-size:12px;color:#315266;margin:20px 0 8px}.meta,.note{color:#526879}.note{background:#edf8f8;border-left:3px solid #087f8b;padding:9px 12px;margin:14px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid #d8e2e8}th{color:#526879;font-size:9px;text-transform:uppercase;letter-spacing:.06em}td{font-size:11px}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.card{border:1px solid #d8e2e8;border-radius:7px;padding:12px}.card b{display:block;font-size:20px;color:#087f8b}.card small{color:#526879}.footer{margin-top:22px;padding-top:9px;border-top:1px solid #d8e2e8;font-size:9px;color:#526879}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style></head><body>
+      <div class="brand">DEALCOCKPIT · PORTFOLIO INTELLIGENCE</div><h1>${escape(company)} — LP Quarterly Summary</h1><div class="meta">${escape($("#tracking-period").value)} reporting period · Prepared ${escape(new Date().toLocaleDateString())} · Illustrative browser-side demo</div>
+      <div class="note"><b>Important:</b> This is a planning summary generated from manually entered demo data, not a verified LP statement, live company feed, or investment advice. All model scores and planning estimates are illustrative.</div>
+      <div class="summary"><div class="card"><b>${escape(score)}</b><small>Equation-based illustrative success score</small></div><div class="card"><b>${escape(countdown)}</b><small>Until fundraising window opens (estimate)</small></div><div class="card"><b>${escape(reserve)}</b><small>Estimated pro-rata reserve target</small></div></div>
+      <h2>Actual metrics vs. pitch-deck baseline</h2><table><thead><tr><th>Metric</th><th>Actual</th><th>Baseline</th></tr></thead><tbody>${rows}</tbody></table>
+      <h2>Threshold alerts</h2><ul>${alerts}</ul>
+      <h2>Planning assumptions</h2><p>Fundraising lead time: ${values["tracking-lead-time"].toFixed(1)} months. Current ownership: ${values["tracking-ownership"].toFixed(1)}%. Target next round: ${displayMoney(values["tracking-next-round"], 2)}. Reserve coverage: ${values["tracking-reserve-coverage"].toFixed(1)}×.</p>
+      <div class="footer">The re-score reuses supplied screening equations with current operating inputs; it is not a trained or validated post-investment model. Confirm source data, legal ownership, liquidity needs, and fundraising assumptions independently.</div>
+      <script>window.addEventListener("load",()=>setTimeout(()=>{window.focus();window.print()},150))</script></body></html>`);
+    printWindow.document.close();
+    toast("LP summary opened. Choose Save as PDF in the print dialog.");
+  }
+
   function renderModel(model) {
     currentModel = model;
     const percent = Math.round(model.probability * 100);
@@ -413,6 +634,7 @@
     renderBenchmarks();
     renderSensitivity();
     updateCounterproposal();
+    if (portfolioTrackingReady) renderPortfolioTracking();
     saveWorkspaceState();
   }
 
@@ -1110,6 +1332,7 @@
     { group: "ENGINES", label: "Compare deals", detail: "Side-by-side pipeline screening", action: () => location.href = "engines.html#compare-deals" },
     { group: "ENGINES", label: "Pitch deck review", detail: "Local PDF preview and speech summary", action: () => location.href = "engines.html#pitch-brief" },
     { group: "ENGINES", label: "Investment committee", detail: "Six-pillar scorecard and local demo voting", action: () => location.href = "engines.html#ic" },
+    { group: "ENGINES", label: "Portfolio tracking", detail: "Actuals, operating alerts, runway, and LP summary", action: () => location.href = "engines.html#portfolio-tracking" },
     { group: "ACTIONS", label: "Load sample startup", detail: "Populate the screening model", action: openSampleDeal },
     { group: "ACTIONS", label: "Add startup to pipeline", detail: "Create a demo deal card", action: addDeal },
     { group: "ACTIONS", label: "Download evaluation memo", detail: "Save a Markdown deal brief", action: downloadMemo },
@@ -2090,6 +2313,7 @@
     } catch { /* Storage may be unavailable in private browsing. */ }
     $("#currency").addEventListener("change", () => {
       if ($("#screening")) { renderAllocation(); updateWaterfall(); }
+      if (portfolioTrackingReady) renderPortfolioTracking();
       saveWorkspaceState();
       toast("Using illustrative fixed display conversion; not live FX.");
     });
@@ -2122,7 +2346,8 @@
     scenario: ["engines", "sensitivity"],
     capital: ["capital-tools", "term-sheet"],
     pipeline: ["pipeline", "compare-deals", "pitch-brief"],
-    committee: ["ic"]
+    committee: ["ic"],
+    tracking: ["portfolio-tracking"]
   };
 
   function initWorkspaceTabs() {
@@ -2260,6 +2485,7 @@
       try { sessionStorage.removeItem("dealcockpit-pending-deal"); } catch { /* Keep the page usable if storage is blocked. */ }
       toast(`Could not restore imported deal: ${error.message}`);
     }
+    initializePortfolioTracking();
     renderAllocation();
     renderPipeline();
     renderPreferenceStack();
@@ -2316,6 +2542,10 @@
     $("#download-memo").addEventListener("click", downloadMemo);
     $("#print-ic-memo").addEventListener("click", printIcMemo);
     $$("[data-print-ic-memo]").forEach((button) => button.addEventListener("click", printIcMemo));
+    $("#export-lp-summary").addEventListener("click", printPortfolioSummary);
+    $("#sync-tracking-deal").addEventListener("click", syncTrackingFromDeal);
+    trackingInputIds.forEach((id) => $(`#${id}`).addEventListener("input", saveTrackingInputs));
+    $("#tracking-period").addEventListener("change", saveTrackingInputs);
     $("#sample-data").addEventListener("click", openSampleDeal);
     $$("[data-preset]").forEach((button) => button.addEventListener("click", () => loadSamplePreset(button.dataset.preset)));
     $("#sample-portfolio").addEventListener("click", loadSamplePortfolio);
